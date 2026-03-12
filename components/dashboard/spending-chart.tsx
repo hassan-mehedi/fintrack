@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useMemo } from "react";
 import { Pie, PieChart, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import {
   Card,
@@ -8,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { formatCurrency } from "@/lib/utils";
 
 interface SpendingData {
   categoryName: string;
@@ -20,17 +22,15 @@ interface SpendingChartProps {
   data: SpendingData[];
 }
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "BDT",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+export const SpendingChart = memo(function SpendingChart({
+  data,
+}: SpendingChartProps) {
+  const total = useMemo(
+    () => data.reduce((sum, item) => sum + item.total, 0),
+    [data]
+  );
 
-export function SpendingChart({ data }: SpendingChartProps) {
-  const total = data.reduce((sum, item) => sum + item.total, 0);
+  const topCategories = useMemo(() => data.slice(0, 6), [data]);
 
   return (
     <Card>
@@ -63,7 +63,7 @@ export function SpendingChart({ data }: SpendingChartProps) {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) => formatCurrency(value)}
+                    formatter={(value: number) => formatCurrency(value, true)}
                     contentStyle={{
                       borderRadius: "8px",
                       border: "1px solid var(--border)",
@@ -75,7 +75,7 @@ export function SpendingChart({ data }: SpendingChartProps) {
               </ResponsiveContainer>
             </div>
             <div className="flex-1 space-y-2">
-              {data.slice(0, 6).map((item) => (
+              {topCategories.map((item) => (
                 <div
                   key={item.categoryName}
                   className="flex items-center justify-between text-sm"
@@ -91,7 +91,7 @@ export function SpendingChart({ data }: SpendingChartProps) {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">
-                      {formatCurrency(item.total)}
+                      {formatCurrency(item.total, true)}
                     </span>
                     <span className="text-muted-foreground">
                       {((item.total / total) * 100).toFixed(0)}%
@@ -105,4 +105,4 @@ export function SpendingChart({ data }: SpendingChartProps) {
       </CardContent>
     </Card>
   );
-}
+});

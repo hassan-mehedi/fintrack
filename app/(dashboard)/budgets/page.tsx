@@ -47,15 +47,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "BDT",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+import { formatCurrency } from "@/lib/utils";
 
 export default function BudgetsPage() {
   return (

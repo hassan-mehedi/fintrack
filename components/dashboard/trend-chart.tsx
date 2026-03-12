@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -17,6 +18,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { format, parse } from "date-fns";
+import { formatCurrency } from "@/lib/utils";
 
 interface TrendData {
   month: string;
@@ -28,20 +30,15 @@ interface TrendChartProps {
   data: TrendData[];
 }
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "BDT",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-export function TrendChart({ data }: TrendChartProps) {
-  const chartData = data.map((d) => ({
-    ...d,
-    label: format(parse(d.month, "yyyy-MM", new Date()), "MMM"),
-  }));
+export const TrendChart = memo(function TrendChart({ data }: TrendChartProps) {
+  const chartData = useMemo(
+    () =>
+      data.map((d) => ({
+        ...d,
+        label: format(parse(d.month, "yyyy-MM", new Date()), "MMM"),
+      })),
+    [data]
+  );
 
   return (
     <Card>
@@ -111,7 +108,7 @@ export function TrendChart({ data }: TrendChartProps) {
                   tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
                 />
                 <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
+                  formatter={(value: number) => formatCurrency(value, true)}
                   contentStyle={{
                     borderRadius: "8px",
                     border: "1px solid var(--border)",
@@ -142,4 +139,4 @@ export function TrendChart({ data }: TrendChartProps) {
       </CardContent>
     </Card>
   );
-}
+});

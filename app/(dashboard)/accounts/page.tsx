@@ -48,15 +48,7 @@ import { ACCOUNT_TYPE_LABELS } from "@/lib/types";
 import type { FinancialAccount } from "@/lib/types";
 import { toast } from "sonner";
 import { Plus, MoreHorizontal, Trash2, Loader2 } from "lucide-react";
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "BDT",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
+import { formatCurrency } from "@/lib/utils";
 
 const ACCOUNT_TYPES = [
   { value: "bank", label: "Bank" },

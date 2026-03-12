@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import {
   Card,
   CardContent,
@@ -9,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format, parseISO } from "date-fns";
+import { formatCurrency } from "@/lib/utils";
 
 interface RecentTransaction {
   id: string;
@@ -27,16 +29,9 @@ interface RecentTransactionsProps {
   transactions: RecentTransaction[];
 }
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "BDT",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-export function RecentTransactions({ transactions }: RecentTransactionsProps) {
+export const RecentTransactions = memo(function RecentTransactions({
+  transactions,
+}: RecentTransactionsProps) {
   return (
     <Card>
       <CardHeader>
@@ -94,4 +89,4 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
       </CardContent>
     </Card>
   );
-}
+});

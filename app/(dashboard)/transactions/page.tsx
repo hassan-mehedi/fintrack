@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { getTransactions } from "@/lib/actions/transactions";
 import { getAccounts } from "@/lib/actions/accounts";
@@ -50,15 +50,7 @@ import {
 } from "date-fns";
 import type { FinancialAccount, Category } from "@/lib/types";
 import { DateRangePicker } from "@/components/layout/date-range-picker";
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "BDT",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
+import { formatCurrency } from "@/lib/utils";
 
 export default function TransactionsPage() {
   return (
@@ -80,40 +72,59 @@ function TransactionsContent() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [formOpen, setFormOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   const dateFrom = fromParam || format(startOfMonth(new Date()), "yyyy-MM-dd");
   const dateTo = toParam || format(endOfMonth(new Date()), "yyyy-MM-dd");
 
+  // Debounce search input by 300ms
+  useEffect(() => {
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [search]);
+
+  // Fetch reference data (accounts/categories) once on mount
+  const refDataLoaded = useRef(false);
+  useEffect(() => {
+    if (!refDataLoaded.current) {
+      refDataLoaded.current = true;
+      Promise.all([getAccounts(), getCategories()]).then(([accts, cats]) => {
+        setAccounts(accts as FinancialAccount[]);
+        setCategories(cats as Category[]);
+      });
+    }
+  }, []);
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [txnData, accts, cats] = await Promise.all([
-        getTransactions({
-          page,
-          search: search || undefined,
-          type: typeFilter !== "all" ? typeFilter : undefined,
-          categoryId: categoryFilter !== "all" ? categoryFilter : undefined,
-          startDate: dateFrom,
-          endDate: dateTo,
-        }),
-        getAccounts(),
-        getCategories(),
-      ]);
+      const txnData = await getTransactions({
+        page,
+        search: debouncedSearch || undefined,
+        type: typeFilter !== "all" ? typeFilter : undefined,
+        categoryId: categoryFilter !== "all" ? categoryFilter : undefined,
+        startDate: dateFrom,
+        endDate: dateTo,
+      });
       setTransactions(txnData.transactions);
       setTotal(txnData.total);
       setTotalPages(txnData.totalPages);
-      setAccounts(accts as FinancialAccount[]);
-      setCategories(cats as Category[]);
     } catch {
       toast.error("Failed to load data");
     } finally {
       setIsLoading(false);
     }
-  }, [page, search, typeFilter, categoryFilter, dateFrom, dateTo]);
+  }, [page, debouncedSearch, typeFilter, categoryFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     loadData();
@@ -176,10 +187,7 @@ function TransactionsContent() {
           <Input
             placeholder="Search transactions..."
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>

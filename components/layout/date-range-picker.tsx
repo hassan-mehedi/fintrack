@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -89,7 +89,7 @@ export function DateRangePicker() {
     }
   };
 
-  const displayLabel = (() => {
+  const displayLabel = useMemo(() => {
     if (!fromParam && !toParam) return format(new Date(), "MMMM yyyy");
     const from = currentFrom;
     const to = currentTo;
@@ -104,7 +104,7 @@ export function DateRangePicker() {
       return format(from, "MMMM yyyy");
     }
     return `${format(from, "MMM d")} - ${format(to, "MMM d, yyyy")}`;
-  })();
+  }, [fromParam, toParam, currentFrom, currentTo]);
 
   return (
     <div className="flex items-center gap-1">

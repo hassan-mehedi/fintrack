@@ -33,15 +33,7 @@ import {
 import { format, parseISO } from "date-fns";
 import type { FinancialAccount, Category } from "@/lib/types";
 import { FREQUENCY_LABELS } from "@/lib/types";
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "BDT",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
+import { formatCurrency } from "@/lib/utils";
 
 export default function RecurringPage() {
   const [rules, setRules] = useState<any[]>([]);

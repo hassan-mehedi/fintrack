@@ -1,12 +1,35 @@
 import { Suspense } from "react";
+import dynamic from "next/dynamic";
 import { getDashboardData } from "@/lib/actions/dashboard";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { AccountCards } from "@/components/dashboard/account-cards";
-import { SpendingChart } from "@/components/dashboard/spending-chart";
-import { TrendChart } from "@/components/dashboard/trend-chart";
 import { RecentTransactions } from "@/components/dashboard/recent-transactions";
 import { DateRangePicker } from "@/components/layout/date-range-picker";
 import type { FinancialAccount } from "@/lib/types";
+
+const SpendingChart = dynamic(
+  () =>
+    import("@/components/dashboard/spending-chart").then(
+      (mod) => mod.SpendingChart
+    ),
+  {
+    loading: () => (
+      <div className="h-[300px] rounded-lg border bg-card animate-pulse" />
+    ),
+  }
+);
+
+const TrendChart = dynamic(
+  () =>
+    import("@/components/dashboard/trend-chart").then(
+      (mod) => mod.TrendChart
+    ),
+  {
+    loading: () => (
+      <div className="h-[300px] rounded-lg border bg-card animate-pulse" />
+    ),
+  }
+);
 
 export default async function DashboardPage({
   searchParams,

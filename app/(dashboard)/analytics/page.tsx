@@ -1,10 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { getDashboardData } from "@/lib/actions/dashboard";
-import { SpendingChart } from "@/components/dashboard/spending-chart";
-import { TrendChart } from "@/components/dashboard/trend-chart";
 import { DateRangePicker } from "@/components/layout/date-range-picker";
 import {
   Card,
@@ -18,21 +17,62 @@ import {
   endOfMonth,
   differenceInDays,
 } from "date-fns";
+import { formatCurrency } from "@/lib/utils";
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "BDT",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+const SpendingChart = dynamic(
+  () =>
+    import("@/components/dashboard/spending-chart").then(
+      (mod) => mod.SpendingChart
+    ),
+  {
+    loading: () => (
+      <div className="h-[300px] rounded-lg border bg-card animate-pulse" />
+    ),
+    ssr: false,
+  }
+);
+
+const TrendChart = dynamic(
+  () =>
+    import("@/components/dashboard/trend-chart").then(
+      (mod) => mod.TrendChart
+    ),
+  {
+    loading: () => (
+      <div className="h-[300px] rounded-lg border bg-card animate-pulse" />
+    ),
+    ssr: false,
+  }
+);
 
 export default function AnalyticsPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center py-20 text-muted-foreground">Loading...</div>}>
+    <Suspense fallback={<AnalyticsSkeleton />}>
       <AnalyticsContent />
     </Suspense>
+  );
+}
+
+function AnalyticsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="h-8 w-32 rounded bg-muted animate-pulse" />
+          <div className="h-4 w-48 rounded bg-muted animate-pulse mt-2" />
+        </div>
+        <div className="h-8 w-40 rounded bg-muted animate-pulse" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="h-[100px] rounded-lg border bg-card animate-pulse" />
+        ))}
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="h-[300px] rounded-lg border bg-card animate-pulse" />
+        <div className="h-[300px] rounded-lg border bg-card animate-pulse" />
+      </div>
+    </div>
   );
 }
 
@@ -47,6 +87,22 @@ function AnalyticsContent() {
 
   const [data, setData] = useState<any>(null);
 
+  // All hooks must be called before any early return
+  const savingsRate = useMemo(
+    () =>
+      data && data.monthlyIncome > 0
+        ? ((data.monthlyIncome - data.monthlyExpense) / data.monthlyIncome) * 100
+        : 0,
+    [data]
+  );
+
+  const dailyAvg = useMemo(() => {
+    if (!data) return 0;
+    const daysInRange =
+      differenceInDays(new Date(dateTo), new Date(dateFrom)) + 1;
+    return daysInRange > 0 ? data.monthlyExpense / daysInRange : 0;
+  }, [data, dateFrom, dateTo]);
+
   const loadData = useCallback(async () => {
     const result = await getDashboardData({ from: dateFrom, to: dateTo });
     setData(result);
@@ -57,21 +113,8 @@ function AnalyticsContent() {
   }, [loadData]);
 
   if (!data) {
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground">
-        Loading...
-      </div>
-    );
+    return <AnalyticsSkeleton />;
   }
-
-  const savingsRate =
-    data.monthlyIncome > 0
-      ? ((data.monthlyIncome - data.monthlyExpense) / data.monthlyIncome) * 100
-      : 0;
-
-  const daysInRange =
-    differenceInDays(new Date(dateTo), new Date(dateFrom)) + 1;
-  const dailyAvg = daysInRange > 0 ? data.monthlyExpense / daysInRange : 0;
 
   return (
     <div className="space-y-6">
@@ -109,7 +152,7 @@ function AnalyticsContent() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-amber-500">
-              {formatCurrency(data.monthlyFees)}
+              {formatCurrency(data.monthlyFees, true)}
             </p>
           </CardContent>
         </Card>
@@ -121,7 +164,7 @@ function AnalyticsContent() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-rose-500">
-              {formatCurrency(dailyAvg)}
+              {formatCurrency(dailyAvg, true)}
             </p>
           </CardContent>
         </Card>
@@ -154,7 +197,7 @@ function AnalyticsContent() {
                           {index + 1}. {cat.categoryIcon} {cat.categoryName}
                         </span>
                         <span className="font-medium">
-                          {formatCurrency(cat.total)} ({percentage.toFixed(1)}%)
+                          {formatCurrency(cat.total, true)} ({percentage.toFixed(1)}%)
                         </span>
                       </div>
                       <div className="h-2 w-full rounded-full bg-muted">

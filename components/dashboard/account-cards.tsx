@@ -1,23 +1,18 @@
 "use client";
 
+import { memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/types";
 import type { FinancialAccount } from "@/lib/types";
+import { formatCurrency } from "@/lib/utils";
 
 interface AccountCardsProps {
   accounts: FinancialAccount[];
 }
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "BDT",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-export function AccountCards({ accounts }: AccountCardsProps) {
+export const AccountCards = memo(function AccountCards({
+  accounts,
+}: AccountCardsProps) {
   if (accounts.length === 0) return null;
 
   return (
@@ -45,4 +40,4 @@ export function AccountCards({ accounts }: AccountCardsProps) {
       ))}
     </div>
   );
-}
+});

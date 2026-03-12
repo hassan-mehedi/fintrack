@@ -20,7 +20,8 @@
       "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npm run build 2>&1 | tail -40)",
       "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npm run build 2>&1 | tail -25)",
       "Bash(ls \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\\\\app\\\\\\(dashboard\\)\\\\\")",
-      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npx tsc --noEmit 2>&1 | head -20)"
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npx tsc --noEmit 2>&1 | head -20)",
+      "Bash(npx next:*)"
     ]
   }
 }

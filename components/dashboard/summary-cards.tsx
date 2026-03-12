@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Wallet,
@@ -7,6 +8,7 @@ import {
   TrendingDown,
   ArrowUpDown,
 } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
 interface SummaryCardsProps {
   totalBalance: number;
@@ -14,48 +16,42 @@ interface SummaryCardsProps {
   monthlyExpense: number;
 }
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "BDT",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-export function SummaryCards({
+export const SummaryCards = memo(function SummaryCards({
   totalBalance,
   monthlyIncome,
   monthlyExpense,
 }: SummaryCardsProps) {
   const net = monthlyIncome - monthlyExpense;
 
-  const cards = [
-    {
-      title: "Total Balance",
-      value: formatCurrency(totalBalance),
-      icon: Wallet,
-      className: "text-primary",
-    },
-    {
-      title: "Monthly Income",
-      value: formatCurrency(monthlyIncome),
-      icon: TrendingUp,
-      className: "text-emerald-500",
-    },
-    {
-      title: "Monthly Expenses",
-      value: formatCurrency(monthlyExpense),
-      icon: TrendingDown,
-      className: "text-rose-500",
-    },
-    {
-      title: "Net Balance",
-      value: formatCurrency(net),
-      icon: ArrowUpDown,
-      className: net >= 0 ? "text-emerald-500" : "text-rose-500",
-    },
-  ];
+  const cards = useMemo(
+    () => [
+      {
+        title: "Total Balance",
+        value: formatCurrency(totalBalance),
+        icon: Wallet,
+        className: "text-primary",
+      },
+      {
+        title: "Monthly Income",
+        value: formatCurrency(monthlyIncome),
+        icon: TrendingUp,
+        className: "text-emerald-500",
+      },
+      {
+        title: "Monthly Expenses",
+        value: formatCurrency(monthlyExpense),
+        icon: TrendingDown,
+        className: "text-rose-500",
+      },
+      {
+        title: "Net Balance",
+        value: formatCurrency(net),
+        icon: ArrowUpDown,
+        className: net >= 0 ? "text-emerald-500" : "text-rose-500",
+      },
+    ],
+    [totalBalance, monthlyIncome, monthlyExpense, net]
+  );
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -76,4 +72,4 @@ export function SummaryCards({
       ))}
     </div>
   );
-}
+});
