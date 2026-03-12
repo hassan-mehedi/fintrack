@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(tree -L 3 /c/Users/Mehed/Projects/alterlabs/expense-tracker -I node_modules 2>/dev/null || find /c/Users/Mehed/Projects/alterlabs/expense-tracker -not -path \"*/node_modules/*\" -not -path \"*/.next/*\" -type d | head -20)",
+      "Bash(npx shadcn@latest init -d 2>&1)",
+      "Bash(npm install:*)",
+      "Bash(npm view:*)",
+      "Bash(npx shadcn@latest add card input label dialog sheet sidebar tabs select separator avatar badge progress toast dropdown-menu popover command tooltip switch calendar form chart sonner table textarea -y 2>&1)",
+      "Bash(npx shadcn@latest add card input label dialog sheet sidebar tabs select separator avatar badge progress dropdown-menu popover command tooltip switch calendar form chart sonner table textarea -y 2>&1)",
+      "Bash(npx shadcn@latest add form -y 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npx tsc --noEmit 2>&1 | head -60)",
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npx shadcn@latest add form -y 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npx shadcn@latest add --all -y 2>&1 | tail -30)",
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && node -e \"const m = require\\('@base-ui/react/menu'\\); console.log\\(Object.keys\\(m.Menu.Trigger\\)\\)\" 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npx tsc --noEmit 2>&1 | head -80)",
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npm ls @hookform/resolvers zod 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npx tsc --noEmit 2>&1 | head -30)",
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npm run build 2>&1 | tail -30)",
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npm run build 2>&1 | tail -40)",
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npm run build 2>&1 | tail -25)",
+      "Bash(ls \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\\\\app\\\\\\(dashboard\\)\\\\\")",
+      "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npx tsc --noEmit 2>&1 | head -20)"
+    ]
+  }
+}
