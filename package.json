@@ -1,5 +1,5 @@
 {
-    "name": "FinTrack",
+    "name": "fintrack",
     "version": "0.1.0",
     "private": true,
     "scripts": {
@@ -54,5 +54,9 @@
         "eslint-config-next": "16.1.6",
         "tailwindcss": "^4",
         "typescript": "^5"
+    },
+    "engines": {
+        "node": "v25.7.0",
+        "npm": "11.10.1"
     }
 }
