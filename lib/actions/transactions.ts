@@ -178,6 +178,132 @@ export async function createTransaction(data: unknown) {
   }
 }
 
+export async function updateTransaction(id: string, data: unknown) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const parsed = transactionSchema.parse(data);
+  const newAmount = Number(parsed.amount);
+  const newFee = Number(parsed.fee || 0);
+
+  // Get the old transaction to reverse its balance effects
+  const [oldTxn] = await db
+    .select()
+    .from(transactions)
+    .where(
+      and(eq(transactions.id, id), eq(transactions.userId, session.user.id))
+    )
+    .limit(1);
+
+  if (!oldTxn) throw new Error("Transaction not found");
+
+  const oldAmount = Number(oldTxn.amount);
+  const oldFee = Number(oldTxn.fee);
+
+  const sqlClient = neon(process.env.DATABASE_URL!);
+  await sqlClient`BEGIN`;
+
+  try {
+    // 1. Reverse old balance effects
+    if (oldTxn.type === "income") {
+      await db
+        .update(financialAccounts)
+        .set({
+          balance: sql`${financialAccounts.balance}::numeric - ${oldAmount - oldFee}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(financialAccounts.id, oldTxn.accountId));
+    } else if (oldTxn.type === "expense") {
+      await db
+        .update(financialAccounts)
+        .set({
+          balance: sql`${financialAccounts.balance}::numeric + ${oldAmount + oldFee}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(financialAccounts.id, oldTxn.accountId));
+    } else if (oldTxn.type === "transfer" && oldTxn.toAccountId) {
+      await db
+        .update(financialAccounts)
+        .set({
+          balance: sql`${financialAccounts.balance}::numeric + ${oldAmount + oldFee}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(financialAccounts.id, oldTxn.accountId));
+      await db
+        .update(financialAccounts)
+        .set({
+          balance: sql`${financialAccounts.balance}::numeric - ${oldAmount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(financialAccounts.id, oldTxn.toAccountId));
+    }
+
+    // 2. Update the transaction record
+    const [updated] = await db
+      .update(transactions)
+      .set({
+        accountId: parsed.accountId,
+        toAccountId: parsed.toAccountId || null,
+        categoryId: parsed.categoryId,
+        amount: parsed.amount,
+        fee: parsed.fee || "0",
+        type: parsed.type,
+        description: parsed.description || "",
+        date: parsed.date,
+        tags: parsed.tags || [],
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(transactions.id, id), eq(transactions.userId, session.user.id))
+      )
+      .returning();
+
+    // 3. Apply new balance effects
+    if (parsed.type === "income") {
+      await db
+        .update(financialAccounts)
+        .set({
+          balance: sql`${financialAccounts.balance}::numeric + ${newAmount - newFee}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(financialAccounts.id, parsed.accountId));
+    } else if (parsed.type === "expense") {
+      await db
+        .update(financialAccounts)
+        .set({
+          balance: sql`${financialAccounts.balance}::numeric - ${newAmount + newFee}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(financialAccounts.id, parsed.accountId));
+    } else if (parsed.type === "transfer" && parsed.toAccountId) {
+      await db
+        .update(financialAccounts)
+        .set({
+          balance: sql`${financialAccounts.balance}::numeric - ${newAmount + newFee}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(financialAccounts.id, parsed.accountId));
+      await db
+        .update(financialAccounts)
+        .set({
+          balance: sql`${financialAccounts.balance}::numeric + ${newAmount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(financialAccounts.id, parsed.toAccountId));
+    }
+
+    await sqlClient`COMMIT`;
+
+    revalidatePath("/");
+    revalidatePath("/transactions");
+    revalidatePath("/accounts");
+    return updated;
+  } catch (error) {
+    await sqlClient`ROLLBACK`;
+    throw error;
+  }
+}
+
 export async function deleteTransaction(id: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");

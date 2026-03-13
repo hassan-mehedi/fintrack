@@ -288,7 +288,7 @@ function BudgetsContent() {
                       </FormControl>
                       <SelectContent>
                         {availableCategories.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>
+                          <SelectItem key={cat.id} value={cat.id} label={`${cat.icon} ${cat.name}`}>
                             {cat.icon} {cat.name}
                           </SelectItem>
                         ))}

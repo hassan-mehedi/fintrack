@@ -38,6 +38,7 @@ import {
   Search,
   MoreHorizontal,
   Trash2,
+  Pencil,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -76,6 +77,7 @@ function TransactionsContent() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [formOpen, setFormOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -140,6 +142,22 @@ function TransactionsContent() {
     }
   };
 
+  const handleEdit = (txn: any) => {
+    setEditingTransaction({
+      id: txn.id,
+      type: txn.type,
+      amount: txn.amount,
+      fee: txn.fee,
+      description: txn.description,
+      date: txn.date,
+      accountId: txn.accountId,
+      categoryId: txn.categoryId,
+      toAccountId: txn.toAccountId,
+      tags: txn.tags || [],
+    });
+    setFormOpen(true);
+  };
+
   const handleExport = async () => {
     try {
       const csv = await exportTransactionsCSV({
@@ -174,7 +192,7 @@ function TransactionsContent() {
           <Button variant="outline" onClick={handleExport}>
             <Download className="mr-1 h-4 w-4" /> Export
           </Button>
-          <Button onClick={() => setFormOpen(true)}>
+          <Button onClick={() => { setEditingTransaction(null); setFormOpen(true); }}>
             <Plus className="mr-1 h-4 w-4" /> Add
           </Button>
         </div>
@@ -221,7 +239,7 @@ function TransactionsContent() {
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
             {categories.map((cat) => (
-              <SelectItem key={cat.id} value={cat.id}>
+              <SelectItem key={cat.id} value={cat.id} label={`${cat.icon} ${cat.name}`}>
                 {cat.icon} {cat.name}
               </SelectItem>
             ))}
@@ -326,6 +344,10 @@ function TransactionsContent() {
                           <MoreHorizontal className="h-4 w-4" />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleEdit(txn)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => handleDelete(txn.id)}
                           className="text-destructive"
@@ -373,10 +395,14 @@ function TransactionsContent() {
         open={formOpen}
         onOpenChange={(open) => {
           setFormOpen(open);
-          if (!open) loadData();
+          if (!open) {
+            setEditingTransaction(null);
+            loadData();
+          }
         }}
         accounts={accounts}
         categories={categories}
+        transaction={editingTransaction}
       />
     </div>
   );

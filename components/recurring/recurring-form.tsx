@@ -246,7 +246,7 @@ export function RecurringForm({
                       </FormControl>
                       <SelectContent>
                         {accounts.map((account) => (
-                          <SelectItem key={account.id} value={account.id}>
+                          <SelectItem key={account.id} value={account.id} label={`${account.icon} ${account.name}`}>
                             {account.icon} {account.name}
                           </SelectItem>
                         ))}
@@ -275,7 +275,7 @@ export function RecurringForm({
                       </FormControl>
                       <SelectContent>
                         {filteredCategories.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>
+                          <SelectItem key={cat.id} value={cat.id} label={`${cat.icon} ${cat.name}`}>
                             {cat.icon} {cat.name}
                           </SelectItem>
                         ))}

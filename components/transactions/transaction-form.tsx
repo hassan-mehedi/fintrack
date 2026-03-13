@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { transactionSchema, type TransactionInput } from "@/lib/validators";
-import { createTransaction } from "@/lib/actions/transactions";
+import { createTransaction, updateTransaction } from "@/lib/actions/transactions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,11 +36,25 @@ import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import type { FinancialAccount, Category } from "@/lib/types";
 
+interface TransactionForEdit {
+  id: string;
+  type: "income" | "expense" | "transfer";
+  amount: number;
+  fee: number;
+  description: string;
+  date: string;
+  accountId: string;
+  categoryId: string;
+  toAccountId: string | null;
+  tags: string[];
+}
+
 interface TransactionFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   accounts: FinancialAccount[];
   categories: Category[];
+  transaction?: TransactionForEdit | null;
 }
 
 export function TransactionForm({
@@ -48,8 +62,10 @@ export function TransactionForm({
   onOpenChange,
   accounts,
   categories,
+  transaction,
 }: TransactionFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const isEditing = !!transaction;
 
   const form = useForm<TransactionInput>({
     resolver: zodResolver(transactionSchema),
@@ -65,6 +81,35 @@ export function TransactionForm({
       tags: [],
     },
   });
+
+  // Reset form when transaction changes (edit vs add)
+  useEffect(() => {
+    if (transaction) {
+      form.reset({
+        type: transaction.type,
+        amount: String(transaction.amount),
+        fee: String(transaction.fee),
+        description: transaction.description,
+        date: transaction.date,
+        accountId: transaction.accountId,
+        categoryId: transaction.categoryId,
+        toAccountId: transaction.toAccountId,
+        tags: transaction.tags || [],
+      });
+    } else if (open) {
+      form.reset({
+        type: "expense",
+        amount: "",
+        fee: "0",
+        description: "",
+        date: format(new Date(), "yyyy-MM-dd"),
+        accountId: accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || "",
+        categoryId: "",
+        toAccountId: null,
+        tags: [],
+      });
+    }
+  }, [transaction, open]);
 
   const transactionType = form.watch("type");
   const selectedAccountId = form.watch("accountId");
@@ -104,12 +149,17 @@ export function TransactionForm({
   async function onSubmit(data: TransactionInput) {
     setIsLoading(true);
     try {
-      await createTransaction(data);
-      toast.success("Transaction added successfully");
+      if (isEditing) {
+        await updateTransaction(transaction.id, data);
+        toast.success("Transaction updated successfully");
+      } else {
+        await createTransaction(data);
+        toast.success("Transaction added successfully");
+      }
       form.reset();
       onOpenChange(false);
     } catch (error) {
-      toast.error("Failed to add transaction");
+      toast.error(isEditing ? "Failed to update transaction" : "Failed to add transaction");
     } finally {
       setIsLoading(false);
     }
@@ -119,7 +169,7 @@ export function TransactionForm({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Add Transaction</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Transaction" : "Add Transaction"}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -203,7 +253,14 @@ export function TransactionForm({
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select account" />
+                          {field.value ? (
+                            <span className="flex flex-1 text-left truncate">
+                              {accounts.find((a) => a.id === field.value)?.icon}{" "}
+                              {accounts.find((a) => a.id === field.value)?.name}
+                            </span>
+                          ) : (
+                            <SelectValue placeholder="Select account" />
+                          )}
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -233,7 +290,14 @@ export function TransactionForm({
                       >
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select account" />
+                            {field.value ? (
+                              <span className="flex flex-1 text-left truncate">
+                                {accounts.find((a) => a.id === field.value)?.icon}{" "}
+                                {accounts.find((a) => a.id === field.value)?.name}
+                              </span>
+                            ) : (
+                              <SelectValue placeholder="Select account" />
+                            )}
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -264,7 +328,14 @@ export function TransactionForm({
                       >
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
+                            {field.value ? (
+                              <span className="flex flex-1 text-left truncate">
+                                {filteredCategories.find((c) => c.id === field.value)?.icon}{" "}
+                                {filteredCategories.find((c) => c.id === field.value)?.name}
+                              </span>
+                            ) : (
+                              <SelectValue placeholder="Select category" />
+                            )}
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -296,7 +367,14 @@ export function TransactionForm({
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
+                          {field.value ? (
+                            <span className="flex flex-1 text-left truncate">
+                              {categories.find((c) => c.id === field.value)?.icon}{" "}
+                              {categories.find((c) => c.id === field.value)?.name}
+                            </span>
+                          ) : (
+                            <SelectValue placeholder="Select category" />
+                          )}
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -427,7 +505,7 @@ export function TransactionForm({
 
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Add Transaction
+              {isEditing ? "Update Transaction" : "Add Transaction"}
             </Button>
           </form>
         </Form>
