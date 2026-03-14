@@ -44,8 +44,23 @@ export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   mobile_banking: "Mobile Banking",
   cash: "Cash",
   credit_card: "Credit Card",
+  loan: "Loan",
   custom: "Custom",
 };
+
+// Account classification
+export type AccountClassification = "asset" | "liability";
+
+export const ACCOUNT_CLASSIFICATION: Record<string, AccountClassification> = {
+  bank: "asset",
+  mobile_banking: "asset",
+  cash: "asset",
+  credit_card: "liability",
+  loan: "liability",
+  custom: "asset",
+};
+
+export const LIABILITY_ACCOUNT_TYPES = ["credit_card", "loan"] as const;
 
 // Transaction type labels
 export const TRANSACTION_TYPE_LABELS: Record<string, string> = {

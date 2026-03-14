@@ -21,7 +21,7 @@ export const registerSchema = z
 // ── Financial Account ──────────────────────────────────
 export const financialAccountSchema = z.object({
   name: z.string().min(1, "Account name is required"),
-  type: z.enum(["bank", "mobile_banking", "cash", "credit_card", "custom"]),
+  type: z.enum(["bank", "mobile_banking", "cash", "credit_card", "loan", "custom"]),
   balance: z.string().refine((val) => !isNaN(Number(val)), "Must be a number"),
   icon: z.string(),
   color: z.string(),
@@ -32,6 +32,11 @@ export const financialAccountSchema = z.object({
       (val) => !val || !isNaN(Number(val)),
       "Must be a number"
     ),
+  creditLimit: z
+    .string()
+    .optional()
+    .nullable()
+    .refine((val) => !val || !isNaN(Number(val)), "Must be a number"),
   isDefault: z.boolean(),
 });
 

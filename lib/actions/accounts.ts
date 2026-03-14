@@ -33,6 +33,7 @@ export async function createAccount(data: unknown) {
       icon: parsed.icon,
       color: parsed.color,
       defaultFeeRate: parsed.defaultFeeRate || null,
+      creditLimit: parsed.creditLimit || null,
       isDefault: parsed.isDefault,
     })
     .returning();
@@ -57,6 +58,7 @@ export async function updateAccount(id: string, data: unknown) {
       icon: parsed.icon,
       color: parsed.color,
       defaultFeeRate: parsed.defaultFeeRate || null,
+      creditLimit: parsed.creditLimit || null,
       isDefault: parsed.isDefault,
       updatedAt: new Date(),
     })

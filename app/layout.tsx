@@ -20,6 +20,10 @@ export const metadata: Metadata = {
   title: "FinTrack — Personal Finance Tracker",
   description:
     "Track your income, expenses, and accounts in one place. Stay on top of your finances.",
+  icons: {
+    icon: "/FinTrack.png",
+    apple: "/FinTrack.png",
+  },
 };
 
 export default function RootLayout({

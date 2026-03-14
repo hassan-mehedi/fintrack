@@ -22,6 +22,7 @@ import {
   isBefore,
   isEqual,
 } from "date-fns";
+import { getBalanceDelta } from "@/lib/accounts";
 
 export async function getRecurringTransactions() {
   const session = await auth();
@@ -223,24 +224,21 @@ export async function processRecurringTransactions() {
           recurringId: rule.id,
         });
 
-        // Update account balance
-        if (rule.type === "income") {
-          await db
-            .update(financialAccounts)
-            .set({
-              balance: sql`${financialAccounts.balance}::numeric + ${amount - fee}`,
-              updatedAt: new Date(),
-            })
-            .where(eq(financialAccounts.id, rule.accountId));
-        } else if (rule.type === "expense") {
-          await db
-            .update(financialAccounts)
-            .set({
-              balance: sql`${financialAccounts.balance}::numeric - ${amount + fee}`,
-              updatedAt: new Date(),
-            })
-            .where(eq(financialAccounts.id, rule.accountId));
-        }
+        // Update account balance (liability-aware)
+        const [account] = await db
+          .select({ type: financialAccounts.type })
+          .from(financialAccounts)
+          .where(eq(financialAccounts.id, rule.accountId))
+          .limit(1);
+
+        const delta = getBalanceDelta(account.type, rule.type as "income" | "expense", amount, fee);
+        await db
+          .update(financialAccounts)
+          .set({
+            balance: sql`${financialAccounts.balance}::numeric + ${delta}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(financialAccounts.id, rule.accountId));
 
         // Update lastProcessed
         await db

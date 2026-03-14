@@ -21,7 +21,15 @@
       "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npm run build 2>&1 | tail -25)",
       "Bash(ls \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\\\\app\\\\\\(dashboard\\)\\\\\")",
       "Bash(cd \"C:\\\\Users\\\\Mehed\\\\Projects\\\\alterlabs\\\\expense-tracker\" && npx tsc --noEmit 2>&1 | head -20)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Bash(find /c/Users/Mehed/Projects/alterlabs/fintrack -type f -name \"*.env*\" -o -name \"drizzle.config.*\" 2>/dev/null | head -10)",
+      "WebFetch(domain:mastra.ai)",
+      "WebFetch(domain:dev.to)",
+      "Bash(find /c/Users/Mehed/Projects/alterlabs/fintrack -type f -name \"*.tsx\" -o -name \"*.ts\" | xargs grep -l \"Sidebar\" | head -20)",
+      "Bash(cd:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)"
     ]
   }
 }

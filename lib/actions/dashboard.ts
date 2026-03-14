@@ -9,6 +9,7 @@ import {
 import { auth } from "@/lib/auth";
 import { eq, and, sql, gte, lte, desc } from "drizzle-orm";
 import { startOfMonth, endOfMonth, format } from "date-fns";
+import { isLiabilityAccount } from "@/lib/accounts";
 
 export async function getDashboardData(options?: {
   from?: string;
@@ -125,14 +126,22 @@ export async function getDashboardData(options?: {
     .orderBy(desc(transactions.date), desc(transactions.createdAt))
     .limit(10);
 
-  const totalBalance = accounts.reduce(
-    (sum, acc) => sum + Number(acc.balance),
-    0
-  );
+  const totalAssets = accounts
+    .filter((acc) => !isLiabilityAccount(acc.type))
+    .reduce((sum, acc) => sum + Number(acc.balance), 0);
+
+  const totalLiabilities = accounts
+    .filter((acc) => isLiabilityAccount(acc.type))
+    .reduce((sum, acc) => sum + Number(acc.balance), 0);
+
+  const netWorth = totalAssets - totalLiabilities;
 
   return {
     accounts,
-    totalBalance,
+    totalBalance: netWorth,
+    totalAssets,
+    totalLiabilities,
+    netWorth,
     monthlyIncome: Number(rangeTotals?.totalIncome || 0),
     monthlyExpense: Number(rangeTotals?.totalExpense || 0),
     monthlyFees: Number(rangeTotals?.totalFees || 0),

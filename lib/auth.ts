@@ -45,6 +45,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           email: user.email,
           image: user.image,
+          plan: user.plan,
         };
       },
     }),
@@ -54,11 +55,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id;
       }
+      // Always fetch the latest plan from DB so admin changes take effect immediately
+      if (token.id) {
+        const [dbUser] = await db
+          .select({ plan: users.plan })
+          .from(users)
+          .where(eq(users.id, token.id as string))
+          .limit(1);
+        token.plan = dbUser?.plan ?? "free";
+      }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
+        session.user.plan = (token.plan as "free" | "pro") ?? "free";
       }
       return session;
     },

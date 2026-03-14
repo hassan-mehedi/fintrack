@@ -16,6 +16,7 @@ export const accountTypeEnum = pgEnum("account_type", [
   "mobile_banking",
   "cash",
   "credit_card",
+  "loan",
   "custom",
 ]);
 
@@ -38,6 +39,13 @@ export const frequencyEnum = pgEnum("frequency", [
   "yearly",
 ]);
 
+export const userPlanEnum = pgEnum("user_plan", ["free", "pro"]);
+
+export const subscriptionRequestStatusEnum = pgEnum(
+  "subscription_request_status",
+  ["pending", "approved", "rejected"]
+);
+
 // ── Users ──────────────────────────────────────────────
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -46,8 +54,20 @@ export const users = pgTable("users", {
   emailVerified: timestamp("email_verified", { mode: "date" }),
   hashedPassword: text("hashed_password").notNull(),
   image: text("image"),
+  plan: userPlanEnum("plan").notNull().default("free"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+// ── Subscription Requests ─────────────────────────────
+export const subscriptionRequests = pgTable("subscription_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: subscriptionRequestStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  reviewedAt: timestamp("reviewed_at", { mode: "date" }),
 });
 
 // ── NextAuth Accounts (OAuth providers) ────────────────
@@ -98,6 +118,7 @@ export const financialAccounts = pgTable("financial_accounts", {
   icon: text("icon").notNull().default("💰"),
   color: text("color").notNull().default("#10b981"),
   defaultFeeRate: decimal("default_fee_rate", { precision: 5, scale: 2 }),
+  creditLimit: decimal("credit_limit", { precision: 12, scale: 2 }),
   isDefault: boolean("is_default").notNull().default(false),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),

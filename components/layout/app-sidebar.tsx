@@ -14,6 +14,7 @@ import {
   LogOut,
   ChevronUp,
   RefreshCw,
+  Bot,
 } from "lucide-react";
 import {
   Sidebar,
@@ -34,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 
 const navItems = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -43,6 +45,7 @@ const navItems = [
   { title: "Recurring", href: "/recurring", icon: RefreshCw },
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
   { title: "Categories", href: "/categories", icon: Tag },
+  { title: "AI Assistant", href: "/assistant", icon: Bot },
   { title: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -89,6 +92,15 @@ export function AppSidebar() {
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
+                    {item.href === "/assistant" &&
+                      session?.user?.plan !== "pro" && (
+                        <Badge
+                          variant="secondary"
+                          className="ml-auto text-[10px] px-1.5 h-4"
+                        >
+                          Pro
+                        </Badge>
+                      )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

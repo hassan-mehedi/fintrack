@@ -45,6 +45,7 @@ import {
   type FinancialAccountInput,
 } from "@/lib/validators";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/types";
+import { isLiabilityAccount } from "@/lib/accounts";
 import type { FinancialAccount } from "@/lib/types";
 import { toast } from "sonner";
 import { Plus, MoreHorizontal, Trash2, Loader2 } from "lucide-react";
@@ -55,10 +56,11 @@ const ACCOUNT_TYPES = [
   { value: "mobile_banking", label: "Mobile Banking" },
   { value: "cash", label: "Cash" },
   { value: "credit_card", label: "Credit Card" },
+  { value: "loan", label: "Loan" },
   { value: "custom", label: "Custom" },
 ];
 
-const ACCOUNT_ICONS = ["🏦", "📱", "💵", "💳", "👛", "🪙", "💰", "🏧"];
+const ACCOUNT_ICONS = ["🏦", "📱", "💵", "💳", "🏧", "👛", "🪙", "💰"];
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
@@ -83,9 +85,13 @@ export default function AccountsPage() {
       icon: "🏦",
       color: "#10b981",
       defaultFeeRate: "",
+      creditLimit: "",
       isDefault: false,
     },
   });
+
+  const watchedType = form.watch("type");
+  const showLiabilityFields = watchedType === "credit_card" || watchedType === "loan";
 
   const onSubmit = async (data: FinancialAccountInput) => {
     setIsLoading(true);
@@ -112,10 +118,17 @@ export default function AccountsPage() {
     }
   };
 
-  const totalBalance = accounts.reduce(
+  const assetAccounts = accounts.filter((a) => !isLiabilityAccount(a.type));
+  const liabilityAccounts = accounts.filter((a) => isLiabilityAccount(a.type));
+  const totalAssets = assetAccounts.reduce(
     (sum, acc) => sum + Number(acc.balance),
     0
   );
+  const totalLiabilities = liabilityAccounts.reduce(
+    (sum, acc) => sum + Number(acc.balance),
+    0
+  );
+  const netWorth = totalAssets - totalLiabilities;
 
   return (
     <div className="space-y-6">
@@ -123,7 +136,12 @@ export default function AccountsPage() {
         <div>
           <h1 className="text-2xl font-bold">Accounts</h1>
           <p className="text-muted-foreground">
-            Total balance: {formatCurrency(totalBalance)}
+            Net worth: {formatCurrency(netWorth)}
+            {totalLiabilities > 0 && (
+              <span className="ml-2 text-xs">
+                (Assets: {formatCurrency(totalAssets)} / Liabilities: {formatCurrency(totalLiabilities)})
+              </span>
+            )}
           </p>
         </div>
         <Button onClick={() => setFormOpen(true)}>
@@ -131,50 +149,40 @@ export default function AccountsPage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {accounts.map((account) => (
-          <Card key={account.id}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">{account.icon}</span>
-                <div>
-                  <CardTitle className="text-base">{account.name}</CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    {ACCOUNT_TYPE_LABELS[account.type]}
-                  </p>
-                </div>
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8" />}>
-                    <MoreHorizontal className="h-4 w-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => handleDelete(account.id)}
-                    className="text-destructive"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </CardHeader>
-            <CardContent>
-              <p
-                className="text-2xl font-bold"
-                style={{ color: account.color }}
-              >
-                {formatCurrency(Number(account.balance))}
-              </p>
-            </CardContent>
-            {account.defaultFeeRate && Number(account.defaultFeeRate) > 0 && (
-              <CardFooter className="text-xs text-muted-foreground pt-0">
-                Default fee: {account.defaultFeeRate}%
-              </CardFooter>
-            )}
-          </Card>
-        ))}
-      </div>
+      {assetAccounts.length > 0 && (
+        <div>
+          <h2 className="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wider">
+            Assets
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {assetAccounts.map((account) => (
+              <AccountCard
+                key={account.id}
+                account={account}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {liabilityAccounts.length > 0 && (
+        <div>
+          <h2 className="text-sm font-medium text-amber-500 mb-3 uppercase tracking-wider">
+            Liabilities
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {liabilityAccounts.map((account) => (
+              <AccountCard
+                key={account.id}
+                account={account}
+                onDelete={handleDelete}
+                isLiability
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Add Account Dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
@@ -262,7 +270,9 @@ export default function AccountsPage() {
                   name="balance"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Initial Balance</FormLabel>
+                      <FormLabel>
+                        {showLiabilityFields ? "Current Amount Owed" : "Initial Balance"}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -296,6 +306,28 @@ export default function AccountsPage() {
                 />
               </div>
 
+              {showLiabilityFields && (
+                <FormField
+                  control={form.control}
+                  name="creditLimit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Credit Limit</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g., 50000.00"
+                          {...field}
+                          value={field.value || ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               <FormField
                 control={form.control}
                 name="color"
@@ -321,5 +353,84 @@ export default function AccountsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function AccountCard({
+  account,
+  onDelete,
+  isLiability,
+}: {
+  account: FinancialAccount;
+  onDelete: (id: string) => void;
+  isLiability?: boolean;
+}) {
+  const balance = Number(account.balance);
+  const creditLimit = account.creditLimit ? Number(account.creditLimit) : null;
+
+  return (
+    <Card className={isLiability ? "border-amber-500/30" : ""}>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">{account.icon}</span>
+          <div>
+            <CardTitle className="text-base">{account.name}</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              {ACCOUNT_TYPE_LABELS[account.type]}
+            </p>
+          </div>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8" />}>
+              <MoreHorizontal className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => onDelete(account.id)}
+              className="text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </CardHeader>
+      <CardContent>
+        <p
+          className={`text-2xl font-bold ${isLiability && balance > 0 ? "text-amber-500" : ""}`}
+          style={!isLiability || balance === 0 ? { color: account.color } : undefined}
+        >
+          {isLiability && balance > 0
+            ? `-${formatCurrency(balance)}`
+            : formatCurrency(balance)}
+        </p>
+        {isLiability && balance > 0 && (
+          <p className="text-xs text-muted-foreground mt-1">Amount owed</p>
+        )}
+        {creditLimit !== null && creditLimit > 0 && (
+          <div className="mt-2">
+            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+              <span>Used</span>
+              <span>
+                {formatCurrency(balance)} / {formatCurrency(creditLimit)}
+              </span>
+            </div>
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-amber-500"
+                style={{
+                  width: `${Math.min((balance / creditLimit) * 100, 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </CardContent>
+      {account.defaultFeeRate && Number(account.defaultFeeRate) > 0 && (
+        <CardFooter className="text-xs text-muted-foreground pt-0">
+          Default fee: {account.defaultFeeRate}%
+        </CardFooter>
+      )}
+    </Card>
   );
 }

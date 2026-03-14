@@ -7,17 +7,23 @@ import {
   TrendingUp,
   TrendingDown,
   ArrowUpDown,
+  Landmark,
+  CreditCard,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 interface SummaryCardsProps {
-  totalBalance: number;
+  totalAssets: number;
+  totalLiabilities: number;
+  netWorth: number;
   monthlyIncome: number;
   monthlyExpense: number;
 }
 
 export const SummaryCards = memo(function SummaryCards({
-  totalBalance,
+  totalAssets,
+  totalLiabilities,
+  netWorth,
   monthlyIncome,
   monthlyExpense,
 }: SummaryCardsProps) {
@@ -26,10 +32,22 @@ export const SummaryCards = memo(function SummaryCards({
   const cards = useMemo(
     () => [
       {
-        title: "Total Balance",
-        value: formatCurrency(totalBalance),
+        title: "Net Worth",
+        value: formatCurrency(netWorth),
         icon: Wallet,
-        className: "text-primary",
+        className: netWorth >= 0 ? "text-primary" : "text-rose-500",
+      },
+      {
+        title: "Total Assets",
+        value: formatCurrency(totalAssets),
+        icon: Landmark,
+        className: "text-emerald-500",
+      },
+      {
+        title: "Total Liabilities",
+        value: formatCurrency(totalLiabilities),
+        icon: CreditCard,
+        className: totalLiabilities > 0 ? "text-amber-500" : "text-muted-foreground",
       },
       {
         title: "Monthly Income",
@@ -50,11 +68,11 @@ export const SummaryCards = memo(function SummaryCards({
         className: net >= 0 ? "text-emerald-500" : "text-rose-500",
       },
     ],
-    [totalBalance, monthlyIncome, monthlyExpense, net]
+    [totalAssets, totalLiabilities, netWorth, monthlyIncome, monthlyExpense, net]
   );
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {cards.map((card) => (
         <Card key={card.title}>
           <CardHeader className="flex flex-row items-center justify-between pb-2">

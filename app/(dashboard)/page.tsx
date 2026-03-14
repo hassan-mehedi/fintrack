@@ -57,7 +57,9 @@ export default async function DashboardPage({
       </div>
 
       <SummaryCards
-        totalBalance={data.totalBalance}
+        totalAssets={data.totalAssets}
+        totalLiabilities={data.totalLiabilities}
+        netWorth={data.netWorth}
         monthlyIncome={data.monthlyIncome}
         monthlyExpense={data.monthlyExpense}
       />
