@@ -8,6 +8,13 @@
       "when": 1773518005843,
       "tag": "0000_tricky_the_liberteens",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1773604424495,
+      "tag": "0001_add_indexes",
+      "breakpoints": true
     }
   ]
 }

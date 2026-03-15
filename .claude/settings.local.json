@@ -29,7 +29,10 @@
       "Bash(cd:*)",
       "Bash(grep:*)",
       "Bash(find:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(npx drizzle-kit:*)"
     ]
   }
 }

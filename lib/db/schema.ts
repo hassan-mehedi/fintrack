@@ -8,6 +8,7 @@ import {
   integer,
   date,
   pgEnum,
+  index,
 } from "drizzle-orm/pg-core";
 
 // Enums
@@ -68,7 +69,9 @@ export const subscriptionRequests = pgTable("subscription_requests", {
   status: subscriptionRequestStatusEnum("status").notNull().default("pending"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   reviewedAt: timestamp("reviewed_at", { mode: "date" }),
-});
+}, (table) => [
+  index("subscription_requests_user_status_idx").on(table.userId, table.status),
+]);
 
 // ── NextAuth Accounts (OAuth providers) ────────────────
 export const authAccounts = pgTable("auth_accounts", {
@@ -86,7 +89,9 @@ export const authAccounts = pgTable("auth_accounts", {
   scope: text("scope"),
   id_token: text("id_token"),
   session_state: text("session_state"),
-});
+}, (table) => [
+  index("auth_accounts_user_id_idx").on(table.userId),
+]);
 
 // ── Sessions ───────────────────────────────────────────
 export const sessions = pgTable("sessions", {
@@ -95,7 +100,9 @@ export const sessions = pgTable("sessions", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   expires: timestamp("expires", { mode: "date" }).notNull(),
-});
+}, (table) => [
+  index("sessions_user_id_idx").on(table.userId),
+]);
 
 // ── Verification Tokens ────────────────────────────────
 export const verificationTokens = pgTable("verification_tokens", {
@@ -122,7 +129,9 @@ export const financialAccounts = pgTable("financial_accounts", {
   isDefault: boolean("is_default").notNull().default(false),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => [
+  index("financial_accounts_user_id_idx").on(table.userId),
+]);
 
 // ── Categories ─────────────────────────────────────────
 export const categories = pgTable("categories", {
@@ -136,7 +145,9 @@ export const categories = pgTable("categories", {
   type: categoryTypeEnum("type").notNull().default("expense"),
   isDefault: boolean("is_default").notNull().default(false),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => [
+  index("categories_user_id_idx").on(table.userId),
+]);
 
 // ── Transactions ───────────────────────────────────────
 export const transactions = pgTable("transactions", {
@@ -165,7 +176,13 @@ export const transactions = pgTable("transactions", {
   recurringId: uuid("recurring_id"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => [
+  index("transactions_user_date_idx").on(table.userId, table.date.desc()),
+  index("transactions_user_type_date_idx").on(table.userId, table.type, table.date),
+  index("transactions_user_category_type_date_idx").on(table.userId, table.categoryId, table.type, table.date),
+  index("transactions_account_id_idx").on(table.accountId),
+  index("transactions_category_id_idx").on(table.categoryId),
+]);
 
 // ── Budgets ────────────────────────────────────────────
 export const budgets = pgTable("budgets", {
@@ -180,7 +197,10 @@ export const budgets = pgTable("budgets", {
   month: integer("month").notNull(),
   year: integer("year").notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => [
+  index("budgets_user_month_year_idx").on(table.userId, table.month, table.year),
+  index("budgets_category_id_idx").on(table.categoryId),
+]);
 
 // ── Recurring Transactions (Phase 2) ───────────────────
 export const recurringTransactions = pgTable("recurring_transactions", {
@@ -204,5 +224,9 @@ export const recurringTransactions = pgTable("recurring_transactions", {
   isActive: boolean("is_active").notNull().default(true),
   lastProcessed: date("last_processed", { mode: "string" }),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => [
+  index("recurring_transactions_user_active_idx").on(table.userId, table.isActive),
+  index("recurring_transactions_account_id_idx").on(table.accountId),
+  index("recurring_transactions_category_id_idx").on(table.categoryId),
+]);
 
