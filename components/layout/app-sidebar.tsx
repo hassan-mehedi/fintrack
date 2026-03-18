@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
@@ -38,7 +39,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
 const navItems = [
-  { title: "Dashboard", href: "/", icon: LayoutDashboard },
+  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Accounts", href: "/accounts", icon: Wallet },
   { title: "Transactions", href: "/transactions", icon: ArrowLeftRight },
   { title: "Budgets", href: "/budgets", icon: PiggyBank },
@@ -65,13 +66,8 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border px-4 py-3">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-            F
-          </div>
-          <span className="text-lg font-bold">
-            <span className="text-primary">Fin</span>Track
-          </span>
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <img src="/logo.png" alt="Fintrack" className="h-9 object-contain" />
         </Link>
       </SidebarHeader>
 
@@ -85,8 +81,8 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     render={<Link href={item.href} />}
                     isActive={
-                      item.href === "/"
-                        ? pathname === "/"
+                      item.href === "/dashboard"
+                        ? pathname === "/dashboard"
                         : pathname.startsWith(item.href)
                     }
                   >

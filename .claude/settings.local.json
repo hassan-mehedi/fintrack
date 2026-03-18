@@ -32,7 +32,14 @@
       "Bash(ls:*)",
       "mcp__context7__resolve-library-id",
       "mcp__context7__query-docs",
-      "Bash(npx drizzle-kit:*)"
+      "Bash(npx drizzle-kit:*)",
+      "Bash(mkdir:*)",
+      "Bash(command -v magick)",
+      "Bash(command -v convert)",
+      "Bash(command -v ffmpeg)",
+      "Bash(node -e \"try { require\\(''sharp''\\); console.log\\(''sharp available''\\); } catch\\(e\\) { console.log\\(''sharp not available''\\); }\")",
+      "Bash(node -e \":*)",
+      "Bash(curl:*)"
     ]
   }
 }

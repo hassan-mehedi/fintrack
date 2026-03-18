@@ -1,16 +1,16 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-const publicRoutes = ["/login", "/register"];
+const publicRoutes = ["/", "/login", "/register"];
 
 export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
   const isPublicRoute = publicRoutes.includes(nextUrl.pathname);
 
-  // Redirect logged-in users away from auth pages
+  // Redirect logged-in users away from public pages to dashboard
   if (isLoggedIn && isPublicRoute) {
-    return NextResponse.redirect(new URL("/", req.url));
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
   // Redirect unauthenticated users to login
@@ -22,5 +22,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.png$|.*\\.jpg$|.*\\.jpeg$|.*\\.svg$|.*\\.webp$|.*\\.ico$).*)"],
 };
