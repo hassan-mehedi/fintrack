@@ -9,7 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/utils";
+import { useFormatCurrency } from "@/components/providers/currency-provider";
 
 interface SpendingData {
   categoryName: string;
@@ -25,6 +25,7 @@ interface SpendingChartProps {
 export const SpendingChart = memo(function SpendingChart({
   data,
 }: SpendingChartProps) {
+  const formatCurrency = useFormatCurrency();
   const total = useMemo(
     () => data.reduce((sum, item) => sum + item.total, 0),
     [data]

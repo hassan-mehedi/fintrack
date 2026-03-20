@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format, parseISO } from "date-fns";
-import { formatCurrency } from "@/lib/utils";
+import { useFormatCurrency } from "@/components/providers/currency-provider";
 
 interface RecentTransaction {
   id: string;
@@ -32,6 +32,7 @@ interface RecentTransactionsProps {
 export const RecentTransactions = memo(function RecentTransactions({
   transactions,
 }: RecentTransactionsProps) {
+  const formatCurrency = useFormatCurrency();
   return (
     <Card>
       <CardHeader>

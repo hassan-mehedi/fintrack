@@ -247,7 +247,7 @@ export const createTransactionTool = createTool({
         description: txn.description,
         date: txn.date,
       },
-      message: `Successfully created ${inputData.type} transaction of $${amount.toFixed(2)}.`,
+      message: `Successfully created ${inputData.type} transaction of ${amount.toFixed(2)}.`,
     };
   },
 });
@@ -421,7 +421,7 @@ export const updateTransactionTool = createTool({
         description: updated.description,
         date: updated.date,
       },
-      message: `Successfully updated transaction to $${newAmount.toFixed(2)}.`,
+      message: `Successfully updated transaction to ${newAmount.toFixed(2)}.`,
     };
   },
 });

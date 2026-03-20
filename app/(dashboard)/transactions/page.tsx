@@ -51,7 +51,7 @@ import {
 } from "date-fns";
 import type { FinancialAccount, Category } from "@/lib/types";
 import { DateRangePicker } from "@/components/layout/date-range-picker";
-import { formatCurrency } from "@/lib/utils";
+import { useFormatCurrency } from "@/components/providers/currency-provider";
 
 export default function TransactionsPage() {
   return (
@@ -62,6 +62,7 @@ export default function TransactionsPage() {
 }
 
 function TransactionsContent() {
+  const formatCurrency = useFormatCurrency();
   const searchParams = useSearchParams();
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");

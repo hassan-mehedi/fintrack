@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CURRENCY_CODES } from "./currencies";
 
 // ── Auth ───────────────────────────────────────────────
 export const loginSchema = z.object({
@@ -12,6 +13,7 @@ export const registerSchema = z
     email: z.string().email("Invalid email address"),
     password: z.string().min(6, "Password must be at least 6 characters"),
     confirmPassword: z.string(),
+    currency: z.enum(CURRENCY_CODES),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",

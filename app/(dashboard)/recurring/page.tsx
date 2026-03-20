@@ -33,9 +33,10 @@ import {
 import { format, parseISO } from "date-fns";
 import type { FinancialAccount, Category } from "@/lib/types";
 import { FREQUENCY_LABELS } from "@/lib/types";
-import { formatCurrency } from "@/lib/utils";
+import { useFormatCurrency } from "@/components/providers/currency-provider";
 
 export default function RecurringPage() {
+  const formatCurrency = useFormatCurrency();
   const [rules, setRules] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);

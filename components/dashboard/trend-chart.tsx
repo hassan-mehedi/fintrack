@@ -18,7 +18,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { format, parse } from "date-fns";
-import { formatCurrency } from "@/lib/utils";
+import { useFormatCurrency } from "@/components/providers/currency-provider";
 
 interface TrendData {
   month: string;
@@ -31,6 +31,7 @@ interface TrendChartProps {
 }
 
 export const TrendChart = memo(function TrendChart({ data }: TrendChartProps) {
+  const formatCurrency = useFormatCurrency();
   const chartData = useMemo(
     () =>
       data.map((d) => ({

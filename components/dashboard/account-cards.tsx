@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/types";
 import { isLiabilityAccount } from "@/lib/accounts";
 import type { FinancialAccount } from "@/lib/types";
-import { formatCurrency } from "@/lib/utils";
+import { useFormatCurrency } from "@/components/providers/currency-provider";
 
 interface AccountCardsProps {
   accounts: FinancialAccount[];
@@ -52,6 +52,7 @@ function AccountCard({
   account: FinancialAccount;
   isLiability?: boolean;
 }) {
+  const formatCurrency = useFormatCurrency();
   const balance = Number(account.balance);
   const creditLimit = account.creditLimit ? Number(account.creditLimit) : null;
 

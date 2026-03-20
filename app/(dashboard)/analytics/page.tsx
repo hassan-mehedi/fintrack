@@ -17,7 +17,7 @@ import {
   endOfMonth,
   differenceInDays,
 } from "date-fns";
-import { formatCurrency } from "@/lib/utils";
+import { useFormatCurrency } from "@/components/providers/currency-provider";
 
 const SpendingChart = dynamic(
   () =>
@@ -77,6 +77,7 @@ function AnalyticsSkeleton() {
 }
 
 function AnalyticsContent() {
+  const formatCurrency = useFormatCurrency();
   const searchParams = useSearchParams();
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");

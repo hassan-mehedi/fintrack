@@ -56,6 +56,7 @@ export const users = pgTable("users", {
   hashedPassword: text("hashed_password").notNull(),
   image: text("image"),
   plan: userPlanEnum("plan").notNull().default("free"),
+  currency: text("currency").notNull().default("BDT"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
 });

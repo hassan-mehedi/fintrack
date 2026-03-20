@@ -10,7 +10,7 @@ import {
   Landmark,
   CreditCard,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { useFormatCurrency } from "@/components/providers/currency-provider";
 
 interface SummaryCardsProps {
   totalAssets: number;
@@ -27,6 +27,7 @@ export const SummaryCards = memo(function SummaryCards({
   monthlyIncome,
   monthlyExpense,
 }: SummaryCardsProps) {
+  const formatCurrency = useFormatCurrency();
   const net = monthlyIncome - monthlyExpense;
 
   const cards = useMemo(
@@ -68,7 +69,7 @@ export const SummaryCards = memo(function SummaryCards({
         className: net >= 0 ? "text-emerald-500" : "text-rose-500",
       },
     ],
-    [totalAssets, totalLiabilities, netWorth, monthlyIncome, monthlyExpense, net]
+    [totalAssets, totalLiabilities, netWorth, monthlyIncome, monthlyExpense, net, formatCurrency]
   );
 
   return (

@@ -47,7 +47,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
-import { formatCurrency } from "@/lib/utils";
+import { useFormatCurrency } from "@/components/providers/currency-provider";
 
 export default function BudgetsPage() {
   return (
@@ -58,6 +58,7 @@ export default function BudgetsPage() {
 }
 
 function BudgetsContent() {
+  const formatCurrency = useFormatCurrency();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -77,6 +78,7 @@ function BudgetsContent() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     try {
@@ -88,6 +90,8 @@ function BudgetsContent() {
       setCategories(catData as Category[]);
     } catch {
       toast.error("Failed to load budgets");
+    } finally {
+      setInitialLoading(false);
     }
   }, [month, year]);
 
@@ -155,6 +159,30 @@ function BudgetsContent() {
   const availableCategories = categories.filter(
     (c) => !budgetedCategoryIds.has(c.id)
   );
+
+  if (initialLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="h-8 w-28 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-52 rounded bg-muted animate-pulse mt-2" />
+          </div>
+          <div className="h-9 w-28 rounded bg-muted animate-pulse" />
+        </div>
+        <div className="flex items-center justify-center gap-4">
+          <div className="h-9 w-9 rounded bg-muted animate-pulse" />
+          <div className="h-7 w-[180px] rounded bg-muted animate-pulse" />
+          <div className="h-9 w-9 rounded bg-muted animate-pulse" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-[150px] rounded-lg border bg-card animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

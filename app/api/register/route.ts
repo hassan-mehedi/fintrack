@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, email, password } = parsed.data;
+    const { name, email, password, currency } = parsed.data;
 
     // Check if user already exists
     const [existingUser] = await db
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     // Create user
     const [newUser] = await db
       .insert(users)
-      .values({ name, email, hashedPassword })
+      .values({ name, email, hashedPassword, currency })
       .returning();
 
     // Seed default categories
