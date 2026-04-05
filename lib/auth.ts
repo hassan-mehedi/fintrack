@@ -4,9 +4,13 @@ import { compare } from "bcryptjs";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { loginLimiter } from "@/lib/rate-limit";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: 24 * 60 * 60, // 1 day (default is 30 days — too long for a financial app)
+  },
   pages: {
     signIn: "/login",
   },
@@ -17,13 +21,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
 
         const email = credentials.email as string;
         const password = credentials.password as string;
+
+        // Rate limit login attempts by email
+        const { success } = await loginLimiter(email.toLowerCase());
+        if (!success) {
+          throw new Error("Too many login attempts. Please try again later.");
+        }
 
         const [user] = await db
           .select()

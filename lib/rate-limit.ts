@@ -1,4 +1,9 @@
-type RateLimitEntry = { timestamps: number[] };
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface RateLimitOptions {
   maxRequests: number;
@@ -11,7 +16,31 @@ interface RateLimitResult {
   retryAfterMs: number;
 }
 
-export function createRateLimiter({ maxRequests, windowMs }: RateLimitOptions) {
+type RateLimitChecker = (key: string) => RateLimitResult | Promise<RateLimitResult>;
+
+// ---------------------------------------------------------------------------
+// Upstash Redis (used when UPSTASH_REDIS_REST_URL is set)
+// ---------------------------------------------------------------------------
+
+const useUpstash = !!(
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+);
+
+let redis: Redis | null = null;
+if (useUpstash) {
+  redis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL!,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// In-memory fallback (dev / single-instance)
+// ---------------------------------------------------------------------------
+
+type RateLimitEntry = { timestamps: number[] };
+
+function createInMemoryLimiter({ maxRequests, windowMs }: RateLimitOptions) {
   const map = new Map<string, RateLimitEntry>();
 
   // Cleanup stale entries every 60s
@@ -27,7 +56,6 @@ export function createRateLimiter({ maxRequests, windowMs }: RateLimitOptions) {
     const now = Date.now();
     const entry = map.get(key) ?? { timestamps: [] };
 
-    // Slide window
     entry.timestamps = entry.timestamps.filter((t) => now - t < windowMs);
 
     if (entry.timestamps.length >= maxRequests) {
@@ -50,24 +78,72 @@ export function createRateLimiter({ maxRequests, windowMs }: RateLimitOptions) {
   };
 }
 
-// --- Shared limiters ---
+// ---------------------------------------------------------------------------
+// Factory — picks Upstash or in-memory automatically
+// ---------------------------------------------------------------------------
 
-export const chatLimiter = createRateLimiter({
-  maxRequests: 20,
-  windowMs: 60_000,
-});
+function createUpstashLimiter(
+  prefix: string,
+  { maxRequests, windowMs }: RateLimitOptions,
+) {
+  const limiter = new Ratelimit({
+    redis: redis!,
+    limiter: Ratelimit.slidingWindow(maxRequests, `${windowMs}ms`),
+    prefix: `ratelimit:${prefix}`,
+  });
 
-export const transcribeLimiter = createRateLimiter({
-  maxRequests: 10,
-  windowMs: 60_000,
-});
+  return async function checkLimit(key: string): Promise<RateLimitResult> {
+    const result = await limiter.limit(key);
+    return {
+      success: result.success,
+      remaining: result.remaining,
+      retryAfterMs: result.success ? 0 : result.reset - Date.now(),
+    };
+  };
+}
 
-export const translateLimiter = createRateLimiter({
-  maxRequests: 10,
-  windowMs: 60_000,
-});
+export function createRateLimiter(
+  opts: RateLimitOptions,
+  prefix = "default",
+): RateLimitChecker {
+  if (useUpstash) {
+    return createUpstashLimiter(prefix, opts);
+  }
+  return createInMemoryLimiter(opts);
+}
 
-// --- Shared constants (also used client-side) ---
+// ---------------------------------------------------------------------------
+// Shared limiters
+// ---------------------------------------------------------------------------
+
+export const chatLimiter = createRateLimiter(
+  { maxRequests: 20, windowMs: 60_000 },
+  "chat",
+);
+
+export const transcribeLimiter = createRateLimiter(
+  { maxRequests: 10, windowMs: 60_000 },
+  "transcribe",
+);
+
+export const translateLimiter = createRateLimiter(
+  { maxRequests: 10, windowMs: 60_000 },
+  "translate",
+);
+
+export const registerLimiter = createRateLimiter(
+  { maxRequests: 5, windowMs: 60_000 },
+  "register",
+);
+
+export const loginLimiter = createRateLimiter(
+  { maxRequests: 10, windowMs: 60_000 },
+  "login",
+);
+
+// ---------------------------------------------------------------------------
+// Shared constants (also used client-side)
+// ---------------------------------------------------------------------------
 
 export const LIMITS = {
   maxMessageLength: 500,
@@ -76,4 +152,20 @@ export const LIMITS = {
   transcribeMaxPerMin: 10,
   translateMaxPerMin: 10,
   maxAudioSizeBytes: 5 * 1024 * 1024, // 5MB
+  maxJsonBodyBytes: 100 * 1024, // 100KB — generous for chat messages / form data
 } as const;
+
+// ---------------------------------------------------------------------------
+// Request body size guard
+// ---------------------------------------------------------------------------
+
+export function isBodyTooLarge(
+  req: Request,
+  maxBytes = LIMITS.maxJsonBodyBytes,
+): boolean {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength && parseInt(contentLength, 10) > maxBytes) {
+    return true;
+  }
+  return false;
+}

@@ -42,7 +42,12 @@
       "Bash(curl:*)",
       "Bash(find /c/Users/Mehed/Projects/alterlabs/fintrack -type f \\\\\\(-name *skeleton* -o -name *loading* \\\\\\))",
       "Bash(ls -la /c/Users/Mehed/Projects/alterlabs/fintrack/app/\\\\\\(dashboard\\\\\\)/)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(xargs wc:*)",
+      "Bash(npm audit:*)",
+      "Bash(npm outdated:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm list:*)"
     ]
   }
 }

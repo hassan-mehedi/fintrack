@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const limit = transcribeLimiter(session.user.id);
+  const limit = await transcribeLimiter(session.user.id);
   if (!limit.success) {
     return Response.json(
       { error: "Rate limit exceeded. Try again shortly.", retryAfterMs: limit.retryAfterMs },

@@ -1,15 +1,19 @@
 import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { auth } from "@/lib/auth";
-import { translateLimiter, LIMITS } from "@/lib/rate-limit";
+import { translateLimiter, LIMITS, isBodyTooLarge } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
+  if (isBodyTooLarge(req)) {
+    return Response.json({ error: "Request body too large" }, { status: 413 });
+  }
+
   const session = await auth();
   if (!session?.user?.id) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const limit = translateLimiter(session.user.id);
+  const limit = await translateLimiter(session.user.id);
   if (!limit.success) {
     return Response.json(
       { error: "Rate limit exceeded. Try again shortly.", retryAfterMs: limit.retryAfterMs },

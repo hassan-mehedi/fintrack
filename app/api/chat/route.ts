@@ -6,11 +6,15 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { chatLimiter } from "@/lib/rate-limit";
+import { chatLimiter, isBodyTooLarge } from "@/lib/rate-limit";
 import { validateMessage } from "@/lib/chat-guardrails";
 import { getCurrencyInfo } from "@/lib/currencies";
 
 export async function POST(req: Request) {
+  if (isBodyTooLarge(req)) {
+    return Response.json({ error: "Request body too large" }, { status: 413 });
+  }
+
   const session = await auth();
   if (!session?.user?.id) {
     return new Response("Unauthorized", { status: 401 });
@@ -26,7 +30,7 @@ export async function POST(req: Request) {
     return new Response("Pro plan required", { status: 403 });
   }
 
-  const limit = chatLimiter(session.user.id);
+  const limit = await chatLimiter(session.user.id);
   if (!limit.success) {
     return Response.json(
       { error: "Too many messages. Please wait a moment.", retryAfterMs: limit.retryAfterMs },
