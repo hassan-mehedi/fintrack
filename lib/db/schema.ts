@@ -9,6 +9,7 @@ import {
   date,
   pgEnum,
   index,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 // Enums
@@ -229,5 +230,26 @@ export const recurringTransactions = pgTable("recurring_transactions", {
   index("recurring_transactions_user_active_idx").on(table.userId, table.isActive),
   index("recurring_transactions_account_id_idx").on(table.accountId),
   index("recurring_transactions_category_id_idx").on(table.categoryId),
+]);
+
+// ── Audit Logs ─────────────────────────────────────────
+export const auditActionEnum = pgEnum("audit_action", [
+  "login_success",
+  "login_failed",
+  "logout",
+  "register",
+]);
+
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  action: auditActionEnum("action").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => [
+  index("audit_logs_user_id_idx").on(table.userId),
+  index("audit_logs_created_at_idx").on(table.createdAt.desc()),
 ]);
 

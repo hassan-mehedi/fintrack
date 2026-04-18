@@ -9,8 +9,12 @@ import { eq } from "drizzle-orm";
 import { chatLimiter, isBodyTooLarge } from "@/lib/rate-limit";
 import { validateMessage } from "@/lib/chat-guardrails";
 import { getCurrencyInfo } from "@/lib/currencies";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
+  const start = Date.now();
+  logger.info({ method: "POST", path: "/api/chat" }, "request received");
+
   if (isBodyTooLarge(req)) {
     return Response.json({ error: "Request body too large" }, { status: 413 });
   }
@@ -93,6 +97,7 @@ export async function POST(req: Request) {
     },
   });
 
+  logger.info({ method: "POST", path: "/api/chat", status: 200, duration: Date.now() - start }, "request completed");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return createUIMessageStreamResponse({ stream: stream as any });
 }

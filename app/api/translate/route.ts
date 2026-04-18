@@ -2,8 +2,12 @@ import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { auth } from "@/lib/auth";
 import { translateLimiter, LIMITS, isBodyTooLarge } from "@/lib/rate-limit";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
+  const start = Date.now();
+  logger.info({ method: "POST", path: "/api/translate" }, "request received");
+
   if (isBodyTooLarge(req)) {
     return Response.json({ error: "Request body too large" }, { status: 413 });
   }
@@ -37,5 +41,6 @@ export async function POST(req: Request) {
     prompt: text,
   });
 
+  logger.info({ method: "POST", path: "/api/translate", status: 200, duration: Date.now() - start }, "request completed");
   return Response.json({ translated });
 }

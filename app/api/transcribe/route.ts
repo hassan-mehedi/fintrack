@@ -1,10 +1,14 @@
 import OpenAI from "openai";
 import { auth } from "@/lib/auth";
 import { transcribeLimiter, LIMITS } from "@/lib/rate-limit";
+import { logger } from "@/lib/logger";
 
 const client = new OpenAI();
 
 export async function POST(req: Request) {
+  const start = Date.now();
+  logger.info({ method: "POST", path: "/api/transcribe" }, "request received");
+
   const session = await auth();
   if (!session?.user?.id) {
     return new Response("Unauthorized", { status: 401 });
@@ -39,5 +43,6 @@ export async function POST(req: Request) {
     language,
   });
 
+  logger.info({ method: "POST", path: "/api/transcribe", status: 200, duration: Date.now() - start }, "request completed");
   return Response.json({ text: transcription.text });
 }

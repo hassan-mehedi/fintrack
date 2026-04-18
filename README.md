@@ -24,6 +24,8 @@ A personal finance tracker with an AI-powered assistant. Track income, expenses,
 | AI | Mastra agent framework, OpenAI gpt-4o-mini, Whisper |
 | UI | Tailwind CSS 4, shadcn/ui, Recharts |
 | Rate Limiting | Upstash Redis (in-memory fallback for dev) |
+| Logging | Pino (JSON in production, pretty-printed in dev) |
+| Testing | Vitest (unit tests) |
 
 ## Getting Started
 
@@ -77,6 +79,13 @@ npm run db:studio     # Open Drizzle Studio (database GUI)
 npm run db:generate   # Generate migration files
 ```
 
+### Running Tests
+
+```bash
+npm test              # Run unit tests once
+npm run test:watch    # Run tests in watch mode
+```
+
 ## Project Structure
 
 ```
@@ -88,8 +97,12 @@ lib/
   actions/            # Server actions (all data mutations)
   db/                 # Schema, migrations, DB client
   mastra/             # AI agent and tools
+  __tests__/          # Unit tests (Vitest)
   auth.ts             # NextAuth configuration
+  audit.ts            # Audit log helper (login, logout, register events)
   chat-guardrails.ts  # Prompt injection defense
+  logger.ts           # Pino logger singleton
+  token-revocation.ts # JWT token revocation via Redis
 components/
   ui/                 # shadcn/ui primitives
   dashboard/          # Dashboard-specific components

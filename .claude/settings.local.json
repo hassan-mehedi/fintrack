@@ -47,7 +47,10 @@
       "Bash(npm audit:*)",
       "Bash(npm outdated:*)",
       "Bash(npm ls:*)",
-      "Bash(npm list:*)"
+      "Bash(npm list:*)",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(node *)"
     ]
   }
 }

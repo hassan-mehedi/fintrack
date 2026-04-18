@@ -6,8 +6,13 @@ import { eq } from "drizzle-orm";
 import { registerSchema } from "@/lib/validators";
 import { DEFAULT_CATEGORIES } from "@/lib/db/seed";
 import { registerLimiter, isBodyTooLarge } from "@/lib/rate-limit";
+import { createAuditLog } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
+  const start = Date.now();
+  logger.info({ method: "POST", path: "/api/register" }, "request received");
+
   if (isBodyTooLarge(req)) {
     return NextResponse.json({ error: "Request body too large" }, { status: 413 });
   }
@@ -75,15 +80,21 @@ export async function POST(req: Request) {
       isDefault: true,
     });
 
+    await createAuditLog({
+      action: "register",
+      userId: newUser.id,
+      ipAddress: ip,
+      userAgent: req.headers.get("user-agent") ?? null,
+      metadata: { email },
+    });
+
+    logger.info({ method: "POST", path: "/api/register", status: 201, duration: Date.now() - start }, "request completed");
     return NextResponse.json(
       { message: "Account created successfully" },
       { status: 201 }
     );
   } catch (error) {
-    console.error(
-      "Registration error:",
-      error instanceof Error ? error.message : "Unknown error",
-    );
+    logger.error({ method: "POST", path: "/api/register", err: error }, "register request failed");
     return NextResponse.json(
       { error: "Something went wrong" },
       { status: 500 }
