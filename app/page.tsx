@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { Navbar } from "@/components/landing/navbar";
 import { HeroSection } from "@/components/landing/hero-section";
 import { FeaturesSection } from "@/components/landing/features-section";
@@ -30,12 +31,18 @@ const jsonLd = {
   },
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <div className="min-h-screen">
       <script
+        suppressHydrationWarning
+        nonce={nonce}
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+        }}
       />
       <Navbar />
       <main>
