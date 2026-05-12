@@ -1,13 +1,12 @@
 FROM node:22-alpine AS base
 
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm install -g npm@11.13.0
 
 FROM base AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm install --no-audit --no-fund
 
 FROM base AS builder
 WORKDIR /app
