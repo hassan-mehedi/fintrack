@@ -31,7 +31,7 @@ A personal finance tracker with an AI-powered assistant. Track income, expenses,
 
 ### Prerequisites
 
-- Node.js >= 20.9.0
+- Node.js >= 22.13.0
 - PostgreSQL database (Neon recommended)
 - OpenAI API key (for AI assistant)
 - Upstash Redis (optional, for production rate limiting)
