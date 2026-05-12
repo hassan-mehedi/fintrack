@@ -125,7 +125,21 @@ Input is protected by multi-layer prompt injection guardrails (Unicode normaliza
 
 ## Deployment
 
-The app is designed for Vercel + Neon + Upstash:
+### Docker / Dokploy
+
+This repo now includes a multi-stage `Dockerfile` for Dokploy or any other container host.
+
+- In Dokploy, choose `Dockerfile` as the build method instead of Nixpacks.
+- Build from the repo root (`personal/fintrack`).
+- Set your runtime environment variables in Dokploy:
+  `DATABASE_URL`, `AUTH_SECRET`, `OPENAI_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, and optionally `NEXT_PUBLIC_SITE_URL`.
+- The Docker build caps the Node.js heap to `1024 MB` during `next build`, which is often more stable on smaller hosts.
+
+If your Dokploy server still runs out of memory during image build, lower parallel load on the host or add temporary swap. The biggest memory consumer is still `next build`, but Dockerfile builds are usually easier to control than Nixpacks on a 2 GB machine.
+
+### Vercel
+
+The app is also designed for Vercel + Neon + Upstash:
 
 1. Push the repo to GitHub
 2. Connect to Vercel and set environment variables
