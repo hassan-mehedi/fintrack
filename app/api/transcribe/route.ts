@@ -3,7 +3,18 @@ import { auth } from "@/lib/auth";
 import { transcribeLimiter, LIMITS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 
-const client = new OpenAI();
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is missing");
+  }
+
+  return new OpenAI({ apiKey });
+}
 
 export async function POST(req: Request) {
   const start = Date.now();
@@ -33,6 +44,7 @@ export async function POST(req: Request) {
   }
 
   const language = (formData.get("language") as string) || "en";
+  const client = getOpenAIClient();
 
   // Convert Blob to File for OpenAI SDK
   const file = new File([audio], `recording.webm`, { type: audio.type || "audio/webm" });
