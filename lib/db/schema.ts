@@ -10,6 +10,7 @@ import {
   pgEnum,
   index,
   jsonb,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // Enums
@@ -58,6 +59,7 @@ export const users = pgTable("users", {
   image: text("image"),
   plan: userPlanEnum("plan").notNull().default("free"),
   currency: text("currency").notNull().default("BDT"),
+  sessionVersion: integer("session_version").notNull().default(0),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
 });
@@ -112,6 +114,20 @@ export const verificationTokens = pgTable("verification_tokens", {
   token: text("token").notNull(),
   expires: timestamp("expires", { mode: "date" }).notNull(),
 });
+
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("password_reset_tokens_token_hash_idx").on(table.tokenHash),
+  index("password_reset_tokens_user_id_idx").on(table.userId),
+  index("password_reset_tokens_expires_at_idx").on(table.expiresAt),
+]);
 
 // ── Financial Accounts ─────────────────────────────────
 export const financialAccounts = pgTable("financial_accounts", {
@@ -238,6 +254,8 @@ export const auditActionEnum = pgEnum("audit_action", [
   "login_failed",
   "logout",
   "register",
+  "password_reset_requested",
+  "password_reset_completed",
 ]);
 
 export const auditLogs = pgTable("audit_logs", {
@@ -252,4 +270,3 @@ export const auditLogs = pgTable("audit_logs", {
   index("audit_logs_user_id_idx").on(table.userId),
   index("audit_logs_created_at_idx").on(table.createdAt.desc()),
 ]);
-

@@ -1,8 +1,8 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-const publicRoutes = ["/", "/login", "/register"];
-const publicApiPrefixes = ["/api/auth", "/api/register"];
+const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-password"];
+const publicApiPrefixes = ["/api/auth", "/api/register", "/api/password-reset"];
 const isDev = process.env.NODE_ENV !== "production";
 
 function generateNonce() {

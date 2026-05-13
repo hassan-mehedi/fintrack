@@ -2,7 +2,13 @@ import { db } from "@/lib/db";
 import { auditLogs } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 
-type AuditAction = "login_success" | "login_failed" | "logout" | "register";
+type AuditAction =
+  | "login_success"
+  | "login_failed"
+  | "logout"
+  | "register"
+  | "password_reset_requested"
+  | "password_reset_completed";
 
 export async function createAuditLog({
   action,

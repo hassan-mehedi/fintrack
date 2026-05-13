@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PasswordInput } from "@/components/auth/password-input";
-import { loginSchema, type LoginInput } from "@/lib/validators";
+import {
+  forgotPasswordRequestSchema,
+  type ForgotPasswordRequestInput,
+} from "@/lib/validators";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,34 +28,39 @@ import {
 } from "@/components/ui/form";
 import { Loader2 } from "lucide-react";
 
-export default function LoginPage() {
-  const router = useRouter();
+const SUCCESS_MESSAGE =
+  "If an account with that email exists, we sent a password reset link.";
+
+export default function ForgotPasswordPage() {
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+  const form = useForm<ForgotPasswordRequestInput>({
+    resolver: zodResolver(forgotPasswordRequestSchema),
+    defaultValues: { email: "" },
   });
 
-  async function onSubmit(data: LoginInput) {
+  async function onSubmit(data: ForgotPasswordRequestInput) {
     setIsLoading(true);
     setError("");
+    setSuccess("");
 
-    const result = await signIn("credentials", {
-      email: data.email,
-      password: data.password,
-      redirect: false,
+    const response = await fetch("/api/password-reset/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     });
 
+    const result = await response.json();
     setIsLoading(false);
 
-    if (result?.error) {
-      setError("Invalid email or password");
-    } else {
-      router.push("/");
-      router.refresh();
+    if (!response.ok) {
+      setError(result.error || "Something went wrong");
+      return;
     }
+
+    setSuccess(result.message || SUCCESS_MESSAGE);
   }
 
   return (
@@ -64,7 +69,7 @@ export default function LoginPage() {
         <CardTitle className="text-2xl font-bold">
           <span className="text-primary">Fin</span>Track
         </CardTitle>
-        <CardDescription>Sign in to your account</CardDescription>
+        <CardDescription>Request a password reset link</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -74,6 +79,11 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
+            {success && (
+              <div className="rounded-md bg-primary/10 p-3 text-sm text-primary">
+                {success}
+              </div>
+            )}
             <FormField
               control={form.control}
               name="email"
@@ -81,49 +91,24 @@ export default function LoginPage() {
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="you@example.com"
-                      {...field}
-                    />
+                    <Input type="email" placeholder="you@example.com" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <PasswordInput {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="flex justify-end">
-              <Link
-                href="/forgot-password"
-                className="text-sm text-primary hover:underline"
-              >
-                Forgot password?
-              </Link>
-            </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Sign In
+              Send Reset Link
             </Button>
           </form>
         </Form>
       </CardContent>
       <CardFooter className="justify-center">
         <p className="text-sm text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <Link href="/register" className="text-primary hover:underline">
-            Sign up
+          Remembered your password?{" "}
+          <Link href="/login" className="text-primary hover:underline">
+            Sign in
           </Link>
         </p>
       </CardFooter>

@@ -80,6 +80,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           image: user.image,
           plan: user.plan,
+          sessionVersion: user.sessionVersion,
         };
       },
     }),
@@ -90,6 +91,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id;
         token.jti = randomUUID();
+        token.sessionVersion = (user as { sessionVersion?: number }).sessionVersion ?? 0;
       }
 
       // Reject revoked tokens
@@ -101,10 +103,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Always fetch the latest plan/currency from DB
       if (token.id) {
         const [dbUser] = await db
-          .select({ plan: users.plan, currency: users.currency })
+          .select({
+            plan: users.plan,
+            currency: users.currency,
+            sessionVersion: users.sessionVersion,
+          })
           .from(users)
           .where(eq(users.id, token.id as string))
           .limit(1);
+        if (!dbUser) {
+          return null;
+        }
+        if ((token.sessionVersion as number | undefined) !== dbUser.sessionVersion) {
+          return null;
+        }
         token.plan = dbUser?.plan ?? "free";
         token.currency = dbUser?.currency ?? "BDT";
       }

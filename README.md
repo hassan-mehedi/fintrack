@@ -46,6 +46,7 @@ DATABASE_URL=
 
 # Auth
 AUTH_SECRET=
+NEXT_PUBLIC_SITE_URL=
 
 # OpenAI (required for AI assistant)
 OPENAI_API_KEY=
@@ -53,6 +54,11 @@ OPENAI_API_KEY=
 # Upstash Redis (optional — falls back to in-memory in dev)
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
+
+# Resend (required for password reset emails)
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
+RESEND_REPLY_TO=
 ```
 
 ### Setup

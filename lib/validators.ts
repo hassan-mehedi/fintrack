@@ -28,6 +28,21 @@ export const registerSchema = z
     path: ["confirmPassword"],
   });
 
+export const forgotPasswordRequestSchema = z.object({
+  email: z.string().email("Invalid email address"),
+});
+
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1, "Reset token is required"),
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
+
 // ── Financial Account ──────────────────────────────────
 export const financialAccountSchema = z.object({
   name: z.string().min(1, "Account name is required"),
@@ -108,6 +123,8 @@ export const recurringTransactionSchema = z.object({
 // Infer types
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
+export type ForgotPasswordRequestInput = z.infer<typeof forgotPasswordRequestSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type FinancialAccountInput = z.infer<typeof financialAccountSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
 export type TransactionInput = z.infer<typeof transactionSchema>;

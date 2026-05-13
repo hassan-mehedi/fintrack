@@ -141,6 +141,16 @@ export const loginLimiter = createRateLimiter(
   "login",
 );
 
+export const passwordResetRequestLimiter = createRateLimiter(
+  { maxRequests: 5, windowMs: 15 * 60_000 },
+  "password-reset-request",
+);
+
+export const passwordResetConfirmLimiter = createRateLimiter(
+  { maxRequests: 10, windowMs: 15 * 60_000 },
+  "password-reset-confirm",
+);
+
 // ---------------------------------------------------------------------------
 // Shared constants (also used client-side)
 // ---------------------------------------------------------------------------
