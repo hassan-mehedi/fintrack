@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 import { Menu, X } from "lucide-react";
+import { PwaInstallButton } from "@/components/pwa/install-button";
 import { Button } from "@/components/ui/button";
 
 const navLinks = [
@@ -34,7 +36,14 @@ export function Navbar() {
       <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="Fintrack" className="h-9 sm:h-10 object-contain" />
+            <Image
+              src="/logo.png"
+              alt="FinTrack"
+              width={980}
+              height={246}
+              className="h-9 w-auto object-contain sm:h-10"
+              priority
+            />
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
@@ -50,6 +59,7 @@ export function Navbar() {
           </div>
 
           <div className="hidden md:flex items-center gap-3">
+            <PwaInstallButton />
             <Button variant="ghost" nativeButton={false} render={<Link href="/login" />}>
               Log in
             </Button>
@@ -81,10 +91,13 @@ export function Navbar() {
               </a>
             ))}
             <div className="flex gap-3 pt-3 px-2">
+              <PwaInstallButton className="flex-1" />
               <Button variant="ghost" nativeButton={false} className="flex-1" render={<Link href="/login" />}>
                 Log in
               </Button>
-              <Button nativeButton={false} className="flex-1" render={<Link href="/register" />}>
+            </div>
+            <div className="px-2 pt-3">
+              <Button nativeButton={false} className="w-full" render={<Link href="/register" />}>
                 Get Started
               </Button>
             </div>

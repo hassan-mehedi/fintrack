@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
+import { PwaProvider } from "@/components/providers/pwa-provider";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -21,6 +22,8 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://fintrack.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+  applicationName: "FinTrack",
+  manifest: "/manifest.webmanifest",
   title: {
     default: "FinTrack — Free Personal Finance Tracker | Budget & Expense Manager",
     template: "%s | FinTrack",
@@ -41,6 +44,14 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "FinTrack" }],
   creator: "FinTrack",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "FinTrack",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -81,6 +92,13 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#17935f" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f4f35" },
+  ],
+};
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -94,18 +112,20 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthSessionProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-            nonce={nonce}
-          >
-            <TooltipProvider>
-              {children}
-              <Toaster richColors position="bottom-right" />
-            </TooltipProvider>
-          </ThemeProvider>
+          <PwaProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+              nonce={nonce}
+            >
+              <TooltipProvider>
+                {children}
+                <Toaster richColors position="bottom-right" />
+              </TooltipProvider>
+            </ThemeProvider>
+          </PwaProvider>
         </AuthSessionProvider>
       </body>
     </html>
