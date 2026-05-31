@@ -3,15 +3,13 @@
 import { db } from "@/lib/db";
 import {
   recurringTransactions,
-  transactions,
   financialAccounts,
   categories,
 } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
-import { eq, and, desc, lte, sql } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { recurringTransactionSchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
-import { neon } from "@neondatabase/serverless";
 import {
   addDays,
   addWeeks,
@@ -22,7 +20,7 @@ import {
   isBefore,
   isEqual,
 } from "date-fns";
-import { getBalanceDelta } from "@/lib/accounts";
+import { postTransaction } from "@/lib/ledger";
 
 export async function getRecurringTransactions() {
   const session = await auth();
@@ -187,14 +185,11 @@ export async function processRecurringTransactions() {
       )
     );
 
-  const sqlClient = neon(process.env.DATABASE_URL!);
   let created = 0;
 
   for (const rule of active) {
-    // Skip if past end date
     if (rule.endDate && todayStr > rule.endDate) continue;
 
-    // Determine which dates need transactions
     const startFrom = rule.lastProcessed
       ? getNextDate(parseISO(rule.lastProcessed), rule.frequency)
       : parseISO(rule.startDate);
@@ -205,54 +200,27 @@ export async function processRecurringTransactions() {
       const dateStr = format(current, "yyyy-MM-dd");
       if (rule.endDate && dateStr > rule.endDate) break;
 
-      const amount = Number(rule.amount);
-      const fee = Number(rule.fee);
+      await postTransaction({
+        userId: session.user.id,
+        accountId: rule.accountId,
+        categoryId: rule.categoryId,
+        amount: Number(rule.amount),
+        fee: Number(rule.fee),
+        type: rule.type as "income" | "expense",
+        description: rule.description,
+        date: dateStr,
+        tags: [],
+        recurringId: rule.id,
+        source: "recurring",
+        idempotencyKey: `recurring:${rule.id}:${dateStr}`,
+      });
 
-      await sqlClient`BEGIN`;
-      try {
-        // Insert transaction
-        await db.insert(transactions).values({
-          userId: session.user.id,
-          accountId: rule.accountId,
-          categoryId: rule.categoryId,
-          amount: rule.amount,
-          fee: rule.fee,
-          type: rule.type,
-          description: rule.description,
-          date: dateStr,
-          tags: [],
-          recurringId: rule.id,
-        });
+      await db
+        .update(recurringTransactions)
+        .set({ lastProcessed: dateStr })
+        .where(eq(recurringTransactions.id, rule.id));
 
-        // Update account balance (liability-aware)
-        const [account] = await db
-          .select({ type: financialAccounts.type })
-          .from(financialAccounts)
-          .where(eq(financialAccounts.id, rule.accountId))
-          .limit(1);
-
-        const delta = getBalanceDelta(account.type, rule.type as "income" | "expense", amount, fee);
-        await db
-          .update(financialAccounts)
-          .set({
-            balance: sql`${financialAccounts.balance}::numeric + ${delta}`,
-            updatedAt: new Date(),
-          })
-          .where(eq(financialAccounts.id, rule.accountId));
-
-        // Update lastProcessed
-        await db
-          .update(recurringTransactions)
-          .set({ lastProcessed: dateStr })
-          .where(eq(recurringTransactions.id, rule.id));
-
-        await sqlClient`COMMIT`;
-        created++;
-      } catch (error) {
-        await sqlClient`ROLLBACK`;
-        throw error;
-      }
-
+      created++;
       current = getNextDate(current, rule.frequency);
     }
   }

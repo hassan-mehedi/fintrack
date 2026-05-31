@@ -7,11 +7,17 @@ import {
   categories,
 } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
-import { eq, and, desc, gte, lte, sql, ilike, or } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, ilike, isNull, inArray } from "drizzle-orm";
 import { transactionSchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
-import { neon } from "@neondatabase/serverless";
-import { getBalanceDelta, getTransferDeltas } from "@/lib/accounts";
+import {
+  postTransaction,
+  rewriteTransaction,
+  voidTransaction,
+  postSplitTransaction,
+  rewriteSplitTransaction,
+} from "@/lib/ledger";
+import { recordChange } from "@/lib/audit-entity";
 
 export async function getTransactions(filters?: {
   type?: string;
@@ -30,7 +36,12 @@ export async function getTransactions(filters?: {
   const limit = filters?.limit || 20;
   const offset = (page - 1) * limit;
 
-  const conditions = [eq(transactions.userId, session.user.id)];
+  const conditions = [
+    eq(transactions.userId, session.user.id),
+    isNull(transactions.deletedAt),
+    // Hide split children from the main list — they're shown under their parent.
+    isNull(transactions.parentId),
+  ];
 
   if (filters?.type) {
     conditions.push(
@@ -60,6 +71,8 @@ export async function getTransactions(filters?: {
         amount: transactions.amount,
         fee: transactions.fee,
         type: transactions.type,
+        status: transactions.status,
+        source: transactions.source,
         description: transactions.description,
         date: transactions.date,
         tags: transactions.tags,
@@ -70,6 +83,8 @@ export async function getTransactions(filters?: {
         accountId: transactions.accountId,
         accountName: financialAccounts.name,
         toAccountId: transactions.toAccountId,
+        merchantId: transactions.merchantId,
+        isReimbursable: transactions.isReimbursable,
         createdAt: transactions.createdAt,
       })
       .from(transactions)
@@ -100,86 +115,70 @@ export async function getTransactions(filters?: {
   };
 }
 
-async function getAccountType(accountId: string): Promise<string> {
-  const [account] = await db
-    .select({ type: financialAccounts.type })
-    .from(financialAccounts)
-    .where(eq(financialAccounts.id, accountId))
-    .limit(1);
-  return account.type;
-}
-
 export async function createTransaction(data: unknown) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const parsed = transactionSchema.parse(data);
-  const amount = Number(parsed.amount);
-  const fee = Number(parsed.fee || 0);
 
-  const sqlClient = neon(process.env.DATABASE_URL!);
-  await sqlClient`BEGIN`;
-
-  try {
-    const [txn] = await db
-      .insert(transactions)
-      .values({
-        userId: session.user.id,
-        accountId: parsed.accountId,
-        toAccountId: parsed.toAccountId || null,
-        categoryId: parsed.categoryId,
-        amount: parsed.amount,
-        fee: parsed.fee || "0",
-        type: parsed.type,
-        description: parsed.description || "",
-        date: parsed.date,
-        tags: parsed.tags || [],
-      })
-      .returning();
-
-    const sourceType = await getAccountType(parsed.accountId);
-
-    if (parsed.type === "income" || parsed.type === "expense") {
-      const delta = getBalanceDelta(sourceType, parsed.type, amount, fee);
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${delta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.accountId));
-    } else if (parsed.type === "transfer" && parsed.toAccountId) {
-      const destType = await getAccountType(parsed.toAccountId);
-      const { sourceDelta, destDelta } = getTransferDeltas(
-        sourceType, destType, amount, fee
-      );
-
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${sourceDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.accountId));
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${destDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.toAccountId));
-    }
-
-    await sqlClient`COMMIT`;
-
-    revalidatePath("/");
-    revalidatePath("/transactions");
-    revalidatePath("/accounts");
-    return txn;
-  } catch (error) {
-    await sqlClient`ROLLBACK`;
-    throw error;
+  let txn: { id: string };
+  if (parsed.splits && parsed.splits.length > 0) {
+    if (parsed.type === "transfer") throw new Error("Cannot split a transfer");
+    const result = await postSplitTransaction({
+      userId: session.user.id,
+      accountId: parsed.accountId,
+      amount: Number(parsed.amount),
+      fee: Number(parsed.fee || 0),
+      type: parsed.type,
+      status: parsed.status ?? "cleared",
+      source: parsed.source ?? "manual",
+      description: parsed.description || "",
+      date: parsed.date,
+      tags: parsed.tags || [],
+      isReimbursable: parsed.isReimbursable ?? false,
+      externalId: parsed.externalId ?? null,
+      idempotencyKey: parsed.idempotencyKey ?? null,
+      merchantId: parsed.merchantId ?? null,
+      children: parsed.splits.map((c) => ({
+        categoryId: c.categoryId,
+        amount: Number(c.amount),
+        description: c.description,
+      })),
+    });
+    txn = { id: result.parentId };
+  } else {
+    txn = await postTransaction({
+      userId: session.user.id,
+      accountId: parsed.accountId,
+      toAccountId: parsed.toAccountId ?? null,
+      categoryId: parsed.categoryId,
+      merchantId: parsed.merchantId ?? null,
+      amount: Number(parsed.amount),
+      fee: Number(parsed.fee || 0),
+      type: parsed.type,
+      status: parsed.status ?? "cleared",
+      source: parsed.source ?? "manual",
+      description: parsed.description || "",
+      date: parsed.date,
+      tags: parsed.tags || [],
+      isReimbursable: parsed.isReimbursable ?? false,
+      externalId: parsed.externalId ?? null,
+      idempotencyKey: parsed.idempotencyKey ?? null,
+    });
   }
+
+  await recordChange({
+    ctx: { userId: session.user.id, source: parsed.source ?? "manual" },
+    entity: "transaction",
+    entityId: txn.id,
+    action: "create",
+    after: { ...parsed, id: txn.id },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/transactions");
+  revalidatePath("/accounts");
+  return txn;
 }
 
 export async function updateTransaction(id: string, data: unknown) {
@@ -187,180 +186,343 @@ export async function updateTransaction(id: string, data: unknown) {
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const parsed = transactionSchema.parse(data);
-  const newAmount = Number(parsed.amount);
-  const newFee = Number(parsed.fee || 0);
+  const userId = session.user.id;
 
   const [oldTxn] = await db
     .select()
     .from(transactions)
-    .where(
-      and(eq(transactions.id, id), eq(transactions.userId, session.user.id))
-    )
+    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
     .limit(1);
-
   if (!oldTxn) throw new Error("Transaction not found");
+  if (oldTxn.deletedAt) throw new Error("Transaction is deleted");
 
-  const oldAmount = Number(oldTxn.amount);
-  const oldFee = Number(oldTxn.fee);
-
-  const sqlClient = neon(process.env.DATABASE_URL!);
-  await sqlClient`BEGIN`;
-
-  try {
-    // 1. Reverse old balance effects
-    const oldSourceType = await getAccountType(oldTxn.accountId);
-
-    if (oldTxn.type === "income" || oldTxn.type === "expense") {
-      const oldDelta = getBalanceDelta(oldSourceType, oldTxn.type, oldAmount, oldFee);
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric - ${oldDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, oldTxn.accountId));
-    } else if (oldTxn.type === "transfer" && oldTxn.toAccountId) {
-      const oldDestType = await getAccountType(oldTxn.toAccountId);
-      const { sourceDelta, destDelta } = getTransferDeltas(
-        oldSourceType, oldDestType, oldAmount, oldFee
-      );
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric - ${sourceDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, oldTxn.accountId));
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric - ${destDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, oldTxn.toAccountId));
-    }
-
-    // 2. Update the transaction record
-    const [updated] = await db
-      .update(transactions)
-      .set({
+  if (parsed.splits && parsed.splits.length > 0) {
+    if (parsed.type === "transfer") throw new Error("Cannot split a transfer");
+    await rewriteSplitTransaction({
+      parentId: id,
+      input: {
+        userId,
         accountId: parsed.accountId,
-        toAccountId: parsed.toAccountId || null,
-        categoryId: parsed.categoryId,
-        amount: parsed.amount,
-        fee: parsed.fee || "0",
+        amount: Number(parsed.amount),
+        fee: Number(parsed.fee || 0),
         type: parsed.type,
+        status: parsed.status ?? oldTxn.status,
+        source: parsed.source ?? oldTxn.source,
         description: parsed.description || "",
         date: parsed.date,
         tags: parsed.tags || [],
-        updatedAt: new Date(),
-      })
-      .where(
-        and(eq(transactions.id, id), eq(transactions.userId, session.user.id))
-      )
-      .returning();
-
-    // 3. Apply new balance effects
-    const newSourceType = await getAccountType(parsed.accountId);
-
-    if (parsed.type === "income" || parsed.type === "expense") {
-      const newDelta = getBalanceDelta(newSourceType, parsed.type, newAmount, newFee);
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${newDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.accountId));
-    } else if (parsed.type === "transfer" && parsed.toAccountId) {
-      const newDestType = await getAccountType(parsed.toAccountId);
-      const { sourceDelta, destDelta } = getTransferDeltas(
-        newSourceType, newDestType, newAmount, newFee
-      );
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${sourceDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.accountId));
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${destDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.toAccountId));
-    }
-
-    await sqlClient`COMMIT`;
-
-    revalidatePath("/");
-    revalidatePath("/transactions");
-    revalidatePath("/accounts");
-    return updated;
-  } catch (error) {
-    await sqlClient`ROLLBACK`;
-    throw error;
+        isReimbursable: parsed.isReimbursable ?? oldTxn.isReimbursable,
+        merchantId: parsed.merchantId ?? null,
+        children: parsed.splits.map((c) => ({
+          categoryId: c.categoryId,
+          amount: Number(c.amount),
+          description: c.description,
+        })),
+      },
+    });
+  } else {
+    await rewriteTransaction(id, {
+      userId,
+      accountId: parsed.accountId,
+      toAccountId: parsed.toAccountId ?? null,
+      categoryId: parsed.categoryId,
+      merchantId: parsed.merchantId ?? null,
+      amount: Number(parsed.amount),
+      fee: Number(parsed.fee || 0),
+      type: parsed.type,
+      status: parsed.status ?? oldTxn.status,
+      description: parsed.description || "",
+      date: parsed.date,
+      tags: parsed.tags || [],
+      isReimbursable: parsed.isReimbursable ?? oldTxn.isReimbursable,
+    });
   }
+
+  await recordChange({
+    ctx: { userId, source: parsed.source ?? "manual" },
+    entity: "transaction",
+    entityId: id,
+    action: "update",
+    before: oldTxn as unknown as Record<string, unknown>,
+    after: { ...parsed, id },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/transactions");
+  revalidatePath("/accounts");
+  return { id };
 }
 
 export async function deleteTransaction(id: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
-  const [txn] = await db
+  const [old] = await db
     .select()
     .from(transactions)
-    .where(
-      and(eq(transactions.id, id), eq(transactions.userId, session.user.id))
-    )
+    .where(and(eq(transactions.id, id), eq(transactions.userId, session.user.id)))
     .limit(1);
+  if (!old) throw new Error("Transaction not found");
 
-  if (!txn) throw new Error("Transaction not found");
+  await voidTransaction({ transactionId: id, userId: session.user.id });
 
-  const amount = Number(txn.amount);
-  const fee = Number(txn.fee);
-  const sourceType = await getAccountType(txn.accountId);
-
-  // Reverse the balance changes
-  if (txn.type === "income" || txn.type === "expense") {
-    const delta = getBalanceDelta(sourceType, txn.type, amount, fee);
-    await db
-      .update(financialAccounts)
-      .set({
-        balance: sql`${financialAccounts.balance}::numeric - ${delta}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(financialAccounts.id, txn.accountId));
-  } else if (txn.type === "transfer" && txn.toAccountId) {
-    const destType = await getAccountType(txn.toAccountId);
-    const { sourceDelta, destDelta } = getTransferDeltas(
-      sourceType, destType, amount, fee
-    );
-    await db
-      .update(financialAccounts)
-      .set({
-        balance: sql`${financialAccounts.balance}::numeric - ${sourceDelta}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(financialAccounts.id, txn.accountId));
-    await db
-      .update(financialAccounts)
-      .set({
-        balance: sql`${financialAccounts.balance}::numeric - ${destDelta}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(financialAccounts.id, txn.toAccountId));
-  }
-
-  await db
-    .delete(transactions)
-    .where(
-      and(eq(transactions.id, id), eq(transactions.userId, session.user.id))
-    );
+  await recordChange({
+    ctx: { userId: session.user.id },
+    entity: "transaction",
+    entityId: id,
+    action: "delete",
+    before: old as unknown as Record<string, unknown>,
+  });
 
   revalidatePath("/");
   revalidatePath("/transactions");
   revalidatePath("/accounts");
+}
+
+export async function setTransactionStatus(
+  id: string,
+  status: "pending" | "cleared" | "reconciled",
+) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const [before] = await db
+    .select({ status: transactions.status })
+    .from(transactions)
+    .where(and(eq(transactions.id, id), eq(transactions.userId, session.user.id)))
+    .limit(1);
+  if (!before) throw new Error("Transaction not found");
+
+  await db
+    .update(transactions)
+    .set({ status, updatedAt: new Date() })
+    .where(and(eq(transactions.id, id), eq(transactions.userId, session.user.id)));
+
+  await recordChange({
+    ctx: { userId: session.user.id },
+    entity: "transaction",
+    entityId: id,
+    action: "update",
+    before: { status: before.status },
+    after: { status },
+  });
+
+  revalidatePath("/transactions");
+}
+
+export async function bulkSetTransactionStatus(
+  ids: string[],
+  status: "pending" | "cleared" | "reconciled",
+) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (ids.length === 0) return { updated: 0 };
+
+  await db
+    .update(transactions)
+    .set({ status, updatedAt: new Date() })
+    .where(
+      and(
+        inArray(transactions.id, ids),
+        eq(transactions.userId, session.user.id),
+        isNull(transactions.deletedAt),
+      ),
+    );
+
+  await recordChange({
+    ctx: { userId: session.user.id },
+    entity: "transaction",
+    entityId: ids[0],
+    action: "update",
+    before: { ids, count: ids.length },
+    after: { status },
+  });
+
+  revalidatePath("/transactions");
+  return { updated: ids.length };
+}
+
+export async function markReimbursed(
+  expenseTransactionId: string,
+  reimbursedByTransactionId: string | null,
+) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const [before] = await db
+    .select({
+      isReimbursable: transactions.isReimbursable,
+      reimbursedAt: transactions.reimbursedAt,
+      reimbursedByTransactionId: transactions.reimbursedByTransactionId,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.id, expenseTransactionId),
+        eq(transactions.userId, session.user.id),
+      ),
+    )
+    .limit(1);
+  if (!before) throw new Error("Transaction not found");
+
+  if (reimbursedByTransactionId) {
+    // Sanity check: the linked transaction must belong to the same user
+    // and be an income.
+    const [linked] = await db
+      .select({ type: transactions.type, userId: transactions.userId })
+      .from(transactions)
+      .where(eq(transactions.id, reimbursedByTransactionId))
+      .limit(1);
+    if (!linked || linked.userId !== session.user.id || linked.type !== "income") {
+      throw new Error("Linked reimbursement must be your own income transaction");
+    }
+  }
+
+  await db
+    .update(transactions)
+    .set({
+      reimbursedAt: new Date(),
+      reimbursedByTransactionId,
+      isReimbursable: true,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(transactions.id, expenseTransactionId),
+        eq(transactions.userId, session.user.id),
+      ),
+    );
+
+  await recordChange({
+    ctx: { userId: session.user.id },
+    entity: "transaction",
+    entityId: expenseTransactionId,
+    action: "update",
+    before: before as unknown as Record<string, unknown>,
+    after: { reimbursedAt: new Date(), reimbursedByTransactionId },
+  });
+
+  revalidatePath("/transactions");
+}
+
+export async function clearReimbursed(expenseTransactionId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  await db
+    .update(transactions)
+    .set({
+      reimbursedAt: null,
+      reimbursedByTransactionId: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(transactions.id, expenseTransactionId),
+        eq(transactions.userId, session.user.id),
+      ),
+    );
+
+  revalidatePath("/transactions");
+}
+
+export async function bulkSetCategory(ids: string[], categoryId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (ids.length === 0) return { updated: 0 };
+
+  // Verify the target category belongs to the user (defence in depth).
+  const [cat] = await db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(and(eq(categories.id, categoryId), eq(categories.userId, session.user.id)))
+    .limit(1);
+  if (!cat) throw new Error("Category not found");
+
+  await db
+    .update(transactions)
+    .set({ categoryId, updatedAt: new Date() })
+    .where(
+      and(
+        inArray(transactions.id, ids),
+        eq(transactions.userId, session.user.id),
+        isNull(transactions.deletedAt),
+        // Don't rewrite split parents — their category is the __split__ system row.
+        isNull(transactions.parentId),
+      ),
+    );
+
+  await recordChange({
+    ctx: { userId: session.user.id },
+    entity: "transaction",
+    entityId: ids[0],
+    action: "update",
+    before: { ids, count: ids.length },
+    after: { categoryId },
+  });
+
+  revalidatePath("/transactions");
+  return { updated: ids.length };
+}
+
+export async function bulkDeleteTransactions(ids: string[]) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (ids.length === 0) return { deleted: 0 };
+
+  // Use voidTransaction (already cascades to children + reverses balance).
+  // Done sequentially to keep balance arithmetic ordered.
+  let count = 0;
+  const { voidTransaction } = await import("@/lib/ledger");
+  for (const id of ids) {
+    try {
+      await voidTransaction({ transactionId: id, userId: session.user.id });
+      count++;
+    } catch {
+      // skip and continue
+    }
+  }
+
+  await recordChange({
+    ctx: { userId: session.user.id },
+    entity: "transaction",
+    entityId: ids[0],
+    action: "delete",
+    before: { ids, count: ids.length },
+    after: { deleted: count },
+  });
+
+  revalidatePath("/transactions");
+  revalidatePath("/accounts");
+  return { deleted: count };
+}
+
+/**
+ * Returns the children of a split transaction. Used by the transaction form
+ * when editing an existing split.
+ */
+export async function getSplitChildren(parentId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const rows = await db
+    .select({
+      id: transactions.id,
+      categoryId: transactions.categoryId,
+      amount: transactions.amount,
+      description: transactions.description,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.parentId, parentId),
+        eq(transactions.userId, session.user.id),
+        isNull(transactions.deletedAt),
+      ),
+    )
+    .orderBy(transactions.createdAt);
+  return rows.map((r) => ({
+    ...r,
+    amount: Number(r.amount),
+  }));
 }

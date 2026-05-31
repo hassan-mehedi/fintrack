@@ -47,16 +47,15 @@ export const resetPasswordSchema = z
 export const financialAccountSchema = z.object({
   name: z.string().min(1, "Account name is required"),
   type: z.enum(["bank", "mobile_banking", "cash", "credit_card", "loan", "custom"]),
+  // Optional in the form layer — server fills in from user base currency when omitted.
+  currency: z.enum(CURRENCY_CODES).optional(),
   balance: z.string().refine((val) => !isNaN(Number(val)), "Must be a number"),
   icon: z.string(),
   color: z.string(),
   defaultFeeRate: z
     .string()
     .optional()
-    .refine(
-      (val) => !val || !isNaN(Number(val)),
-      "Must be a number"
-    ),
+    .refine((val) => !val || !isNaN(Number(val)), "Must be a number"),
   creditLimit: z
     .string()
     .optional()
@@ -73,18 +72,35 @@ export const categorySchema = z.object({
   type: z.enum(["income", "expense", "both"]),
 });
 
+// ── Split child ────────────────────────────────────────
+export const splitChildSchema = z.object({
+  categoryId: z.string().uuid("Pick a category"),
+  amount: z.string().refine((v) => Number(v) > 0, "Must be positive"),
+  description: z.string().optional(),
+});
+
 // ── Transaction ────────────────────────────────────────
 export const transactionSchema = z
   .object({
     accountId: z.string().uuid("Select an account"),
     toAccountId: z.string().uuid().optional().nullable(),
-    categoryId: z.string().uuid("Select a category"),
+    // Required when not splitting; can be empty/any when splitting (the server
+    // overrides it with the __split__ system category). The refine() below
+    // enforces "valid uuid in non-split mode".
+    categoryId: z.string(),
+    merchantId: z.string().uuid().optional().nullable(),
     amount: z.string().refine((val) => Number(val) > 0, "Amount must be greater than 0"),
     fee: z.string(),
     type: z.enum(["income", "expense", "transfer"]),
+    status: z.enum(["pending", "cleared", "reconciled", "void"]).optional(),
+    source: z.enum(["manual", "import", "recurring", "ai", "inbound"]).optional(),
     description: z.string(),
     date: z.string().min(1, "Date is required"),
     tags: z.array(z.string()),
+    isReimbursable: z.boolean().optional(),
+    externalId: z.string().optional().nullable(),
+    idempotencyKey: z.string().optional().nullable(),
+    splits: z.array(splitChildSchema).optional(),
   })
   .refine(
     (data) => {
@@ -96,8 +112,32 @@ export const transactionSchema = z
     {
       message: "Destination account is required for transfers",
       path: ["toAccountId"],
-    }
+    },
+  )
+  .refine(
+    (data) => {
+      if (!data.splits || data.splits.length === 0) return true;
+      if (data.type === "transfer") return false;
+      const sum = data.splits.reduce((s, c) => s + Number(c.amount), 0);
+      return Math.abs(sum - Number(data.amount)) < 0.01;
+    },
+    {
+      message: "Split children must sum to the transaction amount",
+      path: ["splits"],
+    },
+  )
+  .refine(
+    (data) => {
+      // Non-split: parent must have a valid category UUID. Split: server fills in.
+      if (data.splits && data.splits.length > 0) return true;
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        data.categoryId,
+      );
+    },
+    { message: "Select a category", path: ["categoryId"] },
   );
+
+export type SplitChildInput = z.infer<typeof splitChildSchema>;
 
 // ── Budget ─────────────────────────────────────────────
 export const budgetSchema = z.object({

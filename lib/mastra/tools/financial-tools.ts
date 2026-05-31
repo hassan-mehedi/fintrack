@@ -7,7 +7,7 @@ import {
   categories,
   budgets,
 } from "@/lib/db/schema";
-import { eq, and, sql, gte, lte, desc, ilike } from "drizzle-orm";
+import { eq, and, sql, gte, lte, desc, ilike, isNull } from "drizzle-orm";
 import { startOfMonth, endOfMonth, format } from "date-fns";
 import { isLiabilityAccount } from "@/lib/accounts";
 
@@ -74,6 +74,7 @@ export const getFinancialSummary = createTool({
       .where(
         and(
           eq(transactions.userId, userId),
+          isNull(transactions.deletedAt),
           gte(transactions.date, dateFrom),
           lte(transactions.date, dateTo)
         )
@@ -89,6 +90,7 @@ export const getFinancialSummary = createTool({
       .where(
         and(
           eq(transactions.userId, userId),
+          isNull(transactions.deletedAt),
           eq(transactions.type, "expense"),
           gte(transactions.date, dateFrom),
           lte(transactions.date, dateTo)
@@ -201,7 +203,10 @@ export const getTransactionsList = createTool({
     const userId = context?.requestContext?.get("userId") as string;
     const limit = inputData.limit || 20;
 
-    const conditions = [eq(transactions.userId, userId)];
+    const conditions = [
+      eq(transactions.userId, userId),
+      isNull(transactions.deletedAt),
+    ];
 
     if (inputData.type) {
       conditions.push(eq(transactions.type, inputData.type));
@@ -312,6 +317,7 @@ export const getBudgetStatus = createTool({
       .where(
         and(
           eq(transactions.userId, userId),
+          isNull(transactions.deletedAt),
           eq(transactions.type, "expense"),
           gte(transactions.date, dateStart),
           lte(transactions.date, dateEnd)

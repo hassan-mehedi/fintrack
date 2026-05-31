@@ -31,6 +31,48 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: "FinTrack", body: event.data.text() };
+  }
+  const title = payload.title || "FinTrack";
+  const options = {
+    body: payload.body || "",
+    tag: payload.tag,
+    data: { url: payload.url || "/", ...(payload.data || {}) },
+    icon: "/pwa-icon?size=192",
+    badge: "/pwa-icon?size=192",
+    renotify: !!payload.tag,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientsArr) => {
+      // Focus an existing tab if open on the same origin.
+      for (const client of clientsArr) {
+        try {
+          const target = new URL(url, self.location.origin);
+          const current = new URL(client.url);
+          if (current.origin === target.origin) {
+            return client.focus().then(() => client.navigate(target.href));
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+      return self.clients.openWindow(url);
+    }),
+  );
+});
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 

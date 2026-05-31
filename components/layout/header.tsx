@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "./theme-toggle";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { TransactionForm } from "@/components/transactions/transaction-form";
 import { getAccounts } from "@/lib/actions/accounts";
 import { getCategories } from "@/lib/actions/categories";
@@ -34,6 +35,7 @@ export function Header() {
         <Separator orientation="vertical" className="h-6" />
         <div className="flex-1" />
         <PwaInstallButton />
+        <NotificationBell />
         <Button size="sm" onClick={() => setFormOpen(true)}>
           <Plus className="mr-1 h-4 w-4" />
           Add Transaction

@@ -22,6 +22,11 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { SUPPORTED_CURRENCIES } from "@/lib/currencies";
 import { updateCurrency } from "@/lib/actions/settings";
 import { toast } from "sonner";
+import { InboundSettingsPanel } from "@/components/inbox/inbound-settings-panel";
+import { NotificationSettingsPanel } from "@/components/notifications/notification-settings-panel";
+import { TwoFactorPanel } from "@/components/security/two-factor-panel";
+import { SessionsPanel } from "@/components/security/sessions-panel";
+import { TemplatesPanel } from "@/components/transactions/templates-panel";
 
 export default function SettingsPage() {
   const { data: session, update } = useSession();
@@ -131,6 +136,12 @@ export default function SettingsPage() {
             <ThemeToggle />
           </CardContent>
         </Card>
+
+        <TwoFactorPanel />
+        <SessionsPanel />
+        <TemplatesPanel />
+        <NotificationSettingsPanel />
+        <InboundSettingsPanel />
       </div>
     </div>
   );

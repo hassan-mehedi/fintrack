@@ -3,20 +3,13 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import {
   transactions,
-  financialAccounts,
   categories,
+  users,
 } from "@/lib/db/schema";
-import { eq, and, sql } from "drizzle-orm";
-import { getBalanceDelta, getTransferDeltas } from "@/lib/accounts";
-
-async function getAccountType(accountId: string): Promise<string> {
-  const [account] = await db
-    .select({ type: financialAccounts.type })
-    .from(financialAccounts)
-    .where(eq(financialAccounts.id, accountId))
-    .limit(1);
-  return account.type;
-}
+import { eq, and } from "drizzle-orm";
+import { postTransaction, rewriteTransaction } from "@/lib/ledger";
+import { recordChange } from "@/lib/audit-entity";
+import { CURRENCY_CODES } from "@/lib/currencies";
 
 export const getCategoriesList = createTool({
   id: "get-categories-list",
@@ -87,6 +80,12 @@ export const createAccountTool = createTool({
       .string()
       .optional()
       .describe("Credit limit for credit cards or loans, e.g. '50000.00'"),
+    currency: z
+      .enum(CURRENCY_CODES)
+      .optional()
+      .describe(
+        "ISO 4217 currency code, e.g. 'BDT'. Defaults to the user's base currency.",
+      ),
     isDefault: z.boolean().describe("Whether this is the default account"),
   }),
   outputSchema: z.object({
@@ -101,12 +100,23 @@ export const createAccountTool = createTool({
   execute: async (inputData, context) => {
     const userId = context?.requestContext?.get("userId") as string;
 
+    let currency = inputData.currency;
+    if (!currency) {
+      const [u] = await db
+        .select({ currency: users.currency })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      currency = (u?.currency ?? "BDT") as typeof CURRENCY_CODES[number];
+    }
+
     const [account] = await db
       .insert(financialAccounts)
       .values({
         userId,
         name: inputData.name,
         type: inputData.type,
+        currency,
         balance: inputData.balance,
         icon: inputData.icon,
         color: inputData.color,
@@ -115,6 +125,14 @@ export const createAccountTool = createTool({
         isDefault: inputData.isDefault,
       })
       .returning();
+
+    await recordChange({
+      ctx: { userId, source: "ai" },
+      entity: "account",
+      entityId: account.id,
+      action: "create",
+      after: account as unknown as Record<string, unknown>,
+    });
 
     return {
       success: true,
@@ -189,63 +207,36 @@ export const createTransactionTool = createTool({
       };
     }
 
-    const [txn] = await db
-      .insert(transactions)
-      .values({
-        userId,
-        accountId: inputData.accountId,
-        toAccountId: inputData.toAccountId || null,
-        categoryId: inputData.categoryId,
-        amount: inputData.amount,
-        fee: inputData.fee || "0",
-        type: inputData.type,
-        description: inputData.description || "",
-        date,
-        tags: inputData.tags || [],
-      })
-      .returning();
+    const txn = await postTransaction({
+      userId,
+      accountId: inputData.accountId,
+      toAccountId: inputData.toAccountId ?? null,
+      categoryId: inputData.categoryId,
+      amount,
+      fee,
+      type: inputData.type,
+      description: inputData.description ?? "",
+      date,
+      tags: inputData.tags ?? [],
+      source: "ai",
+    });
 
-    const sourceType = await getAccountType(inputData.accountId);
-
-    if (inputData.type === "income" || inputData.type === "expense") {
-      const delta = getBalanceDelta(sourceType, inputData.type, amount, fee);
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${delta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, inputData.accountId));
-    } else if (inputData.type === "transfer" && inputData.toAccountId) {
-      const destType = await getAccountType(inputData.toAccountId);
-      const { sourceDelta, destDelta } = getTransferDeltas(
-        sourceType, destType, amount, fee
-      );
-
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${sourceDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, inputData.accountId));
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${destDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, inputData.toAccountId));
-    }
+    await recordChange({
+      ctx: { userId, source: "ai" },
+      entity: "transaction",
+      entityId: txn.id,
+      action: "create",
+      after: { ...inputData, id: txn.id, amount, fee, date } as unknown as Record<string, unknown>,
+    });
 
     return {
       success: true,
       transaction: {
         id: txn.id,
-        amount: Number(txn.amount),
-        type: txn.type,
-        description: txn.description,
-        date: txn.date,
+        amount,
+        type: inputData.type,
+        description: inputData.description ?? "",
+        date,
       },
       message: `Successfully created ${inputData.type} transaction of ${amount.toFixed(2)}.`,
     };
@@ -317,109 +308,47 @@ export const updateTransactionTool = createTool({
         message: "Transaction not found.",
       };
     }
+    if (oldTxn.deletedAt) {
+      return {
+        success: false,
+        transaction: { id: "", amount: 0, type: "", description: "", date: "" },
+        message: "Transaction has been deleted.",
+      };
+    }
 
-    const oldAmount = Number(oldTxn.amount);
-    const oldFee = Number(oldTxn.fee);
     const newAmount = Number(inputData.amount);
     const newFee = Number(inputData.fee || 0);
 
-    // 1. Reverse old balance effects
-    const oldSourceType = await getAccountType(oldTxn.accountId);
+    await rewriteTransaction(inputData.transactionId, {
+      userId,
+      accountId: inputData.accountId,
+      toAccountId: inputData.toAccountId ?? null,
+      categoryId: inputData.categoryId,
+      amount: newAmount,
+      fee: newFee,
+      type: inputData.type,
+      description: inputData.description ?? "",
+      date: inputData.date,
+      tags: inputData.tags ?? [],
+    });
 
-    if (oldTxn.type === "income" || oldTxn.type === "expense") {
-      const oldDelta = getBalanceDelta(oldSourceType, oldTxn.type, oldAmount, oldFee);
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric - ${oldDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, oldTxn.accountId));
-    } else if (oldTxn.type === "transfer" && oldTxn.toAccountId) {
-      const oldDestType = await getAccountType(oldTxn.toAccountId);
-      const { sourceDelta, destDelta } = getTransferDeltas(
-        oldSourceType, oldDestType, oldAmount, oldFee
-      );
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric - ${sourceDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, oldTxn.accountId));
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric - ${destDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, oldTxn.toAccountId));
-    }
-
-    // 2. Update the transaction record
-    const [updated] = await db
-      .update(transactions)
-      .set({
-        accountId: inputData.accountId,
-        toAccountId: inputData.toAccountId || null,
-        categoryId: inputData.categoryId,
-        amount: inputData.amount,
-        fee: inputData.fee || "0",
-        type: inputData.type,
-        description: inputData.description || "",
-        date: inputData.date,
-        tags: inputData.tags || [],
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(transactions.id, inputData.transactionId),
-          eq(transactions.userId, userId)
-        )
-      )
-      .returning();
-
-    // 3. Apply new balance effects
-    const newSourceType = await getAccountType(inputData.accountId);
-
-    if (inputData.type === "income" || inputData.type === "expense") {
-      const newDelta = getBalanceDelta(newSourceType, inputData.type, newAmount, newFee);
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${newDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, inputData.accountId));
-    } else if (inputData.type === "transfer" && inputData.toAccountId) {
-      const newDestType = await getAccountType(inputData.toAccountId);
-      const { sourceDelta, destDelta } = getTransferDeltas(
-        newSourceType, newDestType, newAmount, newFee
-      );
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${sourceDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, inputData.accountId));
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${destDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, inputData.toAccountId));
-    }
+    await recordChange({
+      ctx: { userId, source: "ai" },
+      entity: "transaction",
+      entityId: inputData.transactionId,
+      action: "update",
+      before: oldTxn as unknown as Record<string, unknown>,
+      after: { ...inputData, id: inputData.transactionId } as unknown as Record<string, unknown>,
+    });
 
     return {
       success: true,
       transaction: {
-        id: updated.id,
-        amount: Number(updated.amount),
-        type: updated.type,
-        description: updated.description,
-        date: updated.date,
+        id: inputData.transactionId,
+        amount: newAmount,
+        type: inputData.type,
+        description: inputData.description ?? "",
+        date: inputData.date,
       },
       message: `Successfully updated transaction to ${newAmount.toFixed(2)}.`,
     };

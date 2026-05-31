@@ -28,34 +28,132 @@ import {
 } from "@/components/ui/form";
 import { Loader2 } from "lucide-react";
 
+type Step = "credentials" | "totp";
+
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("credentials");
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [code, setCode] = useState("");
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
 
-  async function onSubmit(data: LoginInput) {
+  const signInAttempt = async (totpCode?: string, recoveryCode?: string) => {
+    const data = form.getValues();
+    return signIn("credentials", {
+      email: data.email,
+      password: data.password,
+      totpCode: totpCode ?? "",
+      recoveryCode: recoveryCode ?? "",
+      redirect: false,
+    });
+  };
+
+  async function onSubmitCredentials(data: LoginInput) {
     setIsLoading(true);
     setError("");
-
     const result = await signIn("credentials", {
       email: data.email,
       password: data.password,
       redirect: false,
     });
-
     setIsLoading(false);
 
-    if (result?.error) {
-      setError("Invalid email or password");
-    } else {
+    if (!result?.error) {
       router.push("/");
       router.refresh();
+      return;
     }
+
+    // NextAuth surfaces the thrown Error's message as result.error.
+    // We use "TOTP_REQUIRED" to mean "password OK, second factor needed".
+    if (result.error.includes("TOTP_REQUIRED")) {
+      setStep("totp");
+      setError("");
+    } else if (result.error.includes("Too many login")) {
+      setError("Too many login attempts. Please try again later.");
+    } else {
+      setError("Invalid email or password");
+    }
+  }
+
+  async function onSubmitTotp(e: React.FormEvent) {
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
+    const result = await signInAttempt(
+      useRecovery ? undefined : code,
+      useRecovery ? code : undefined,
+    );
+    setIsLoading(false);
+    if (!result?.error) {
+      router.push("/");
+      router.refresh();
+      return;
+    }
+    setError(useRecovery ? "Recovery code didn't match" : "Authenticator code didn't match");
+  }
+
+  if (step === "totp") {
+    return (
+      <Card>
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold">
+            <span className="text-primary">Fin</span>Track
+          </CardTitle>
+          <CardDescription>Enter your authenticator code</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onSubmitTotp} className="space-y-4">
+            {error && (
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+            <Input
+              autoFocus
+              inputMode={useRecovery ? "text" : "numeric"}
+              placeholder={useRecovery ? "XXXX-XXXX-XXXX-XXXX" : "123456"}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              maxLength={useRecovery ? 19 : 6}
+            />
+            <Button type="submit" className="w-full" disabled={isLoading || !code.trim()}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Verify
+            </Button>
+            <button
+              type="button"
+              onClick={() => {
+                setUseRecovery((v) => !v);
+                setCode("");
+                setError("");
+              }}
+              className="block w-full text-center text-xs text-muted-foreground hover:text-foreground"
+            >
+              {useRecovery ? "Use authenticator code instead" : "Use a recovery code"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStep("credentials");
+                setCode("");
+                setUseRecovery(false);
+                setError("");
+              }}
+              className="block w-full text-center text-xs text-muted-foreground hover:text-foreground"
+            >
+              ← Back
+            </button>
+          </form>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -68,7 +166,7 @@ export default function LoginPage() {
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmitCredentials)} className="space-y-4">
             {error && (
               <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 {error}

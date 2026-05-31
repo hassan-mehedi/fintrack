@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { transactions, categories, financialAccounts } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
-import { eq, and, desc, gte, lte, ilike } from "drizzle-orm";
+import { eq, and, desc, gte, lte, ilike, isNull } from "drizzle-orm";
 
 export async function exportTransactionsCSV(filters?: {
   type?: string;
@@ -15,7 +15,10 @@ export async function exportTransactionsCSV(filters?: {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
-  const conditions = [eq(transactions.userId, session.user.id)];
+  const conditions = [
+    eq(transactions.userId, session.user.id),
+    isNull(transactions.deletedAt),
+  ];
 
   if (filters?.type) {
     conditions.push(

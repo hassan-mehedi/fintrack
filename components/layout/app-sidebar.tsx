@@ -16,6 +16,7 @@ import {
   ChevronUp,
   RefreshCw,
   Bot,
+  Inbox,
 } from "lucide-react";
 import {
   Sidebar,
@@ -42,6 +43,7 @@ const navItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Accounts", href: "/accounts", icon: Wallet },
   { title: "Transactions", href: "/transactions", icon: ArrowLeftRight },
+  { title: "Inbox", href: "/inbox", icon: Inbox },
   { title: "Budgets", href: "/budgets", icon: PiggyBank },
   { title: "Recurring", href: "/recurring", icon: RefreshCw },
   { title: "Analytics", href: "/analytics", icon: BarChart3 },

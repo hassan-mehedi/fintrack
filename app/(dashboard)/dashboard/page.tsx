@@ -5,6 +5,7 @@ import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { AccountCards } from "@/components/dashboard/account-cards";
 import { RecentTransactions } from "@/components/dashboard/recent-transactions";
 import { DateRangePicker } from "@/components/layout/date-range-picker";
+import { InsightCards } from "@/components/insights/insight-cards";
 import type { FinancialAccount } from "@/lib/types";
 
 const SpendingChart = dynamic(
@@ -63,6 +64,8 @@ export default async function DashboardPage({
         monthlyIncome={data.monthlyIncome}
         monthlyExpense={data.monthlyExpense}
       />
+
+      <InsightCards max={5} />
 
       <AccountCards accounts={data.accounts as FinancialAccount[]} />
 

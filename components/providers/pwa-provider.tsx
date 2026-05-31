@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { installOfflineFlusher } from "@/lib/offline/flusher";
 
 type InstallPlatform = "android" | "desktop" | "ios" | "unknown";
 
@@ -120,6 +121,9 @@ export function PwaProvider({
     } else {
       window.addEventListener("load", registerServiceWorker, { once: true });
     }
+
+    // Drain any transactions queued while offline.
+    installOfflineFlusher();
 
     window.addEventListener(
       "beforeinstallprompt",

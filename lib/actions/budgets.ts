@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { budgets, transactions, categories } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
-import { eq, and, sql, gte, lte } from "drizzle-orm";
+import { eq, and, sql, gte, lte, isNull } from "drizzle-orm";
 import { budgetSchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
 import { startOfMonth, endOfMonth, format } from "date-fns";
@@ -50,6 +50,7 @@ export async function getBudgets(month: number, year: number) {
     .where(
       and(
         eq(transactions.userId, session.user.id),
+        isNull(transactions.deletedAt),
         eq(transactions.type, "expense"),
         gte(transactions.date, dateStart),
         lte(transactions.date, dateEnd)

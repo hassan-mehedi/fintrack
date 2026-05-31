@@ -151,6 +151,26 @@ export const passwordResetConfirmLimiter = createRateLimiter(
   "password-reset-confirm",
 );
 
+export const attachmentSignLimiter = createRateLimiter(
+  { maxRequests: 30, windowMs: 60_000 },
+  "attachment-sign",
+);
+
+export const attachmentFinalizeLimiter = createRateLimiter(
+  { maxRequests: 30, windowMs: 60_000 },
+  "attachment-finalize",
+);
+
+export const inboundEmailLimiter = createRateLimiter(
+  { maxRequests: 120, windowMs: 60_000 },
+  "inbound-email",
+);
+
+export const inboundSmsLimiter = createRateLimiter(
+  { maxRequests: 120, windowMs: 60_000 },
+  "inbound-sms",
+);
+
 // ---------------------------------------------------------------------------
 // Shared constants (also used client-side)
 // ---------------------------------------------------------------------------

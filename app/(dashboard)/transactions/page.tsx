@@ -5,8 +5,20 @@ import { useSearchParams } from "next/navigation";
 import { getTransactions } from "@/lib/actions/transactions";
 import { getAccounts } from "@/lib/actions/accounts";
 import { getCategories } from "@/lib/actions/categories";
-import { deleteTransaction } from "@/lib/actions/transactions";
+import {
+  deleteTransaction,
+  bulkSetTransactionStatus,
+  bulkSetCategory,
+  bulkDeleteTransactions,
+} from "@/lib/actions/transactions";
+import {
+  undoDeleteTransaction,
+  undoBulkDeleteTransactions,
+} from "@/lib/actions/undo";
 import { exportTransactionsCSV } from "@/lib/actions/export";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CheckCheck } from "lucide-react";
+import { SmartSearch, type SmartSearchResult } from "@/components/transactions/smart-search";
 import { TransactionForm } from "@/components/transactions/transaction-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,7 +89,11 @@ function TransactionsContent() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const [aiResult, setAiResult] = useState<SmartSearchResult | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
@@ -136,7 +152,21 @@ function TransactionsContent() {
   const handleDelete = async (id: string) => {
     try {
       await deleteTransaction(id);
-      toast.success("Transaction deleted");
+      toast.success("Transaction deleted", {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            try {
+              await undoDeleteTransaction(id);
+              toast.success("Restored");
+              loadData();
+            } catch {
+              toast.error("Could not undo");
+            }
+          },
+        },
+        duration: 30_000,
+      });
       loadData();
     } catch {
       toast.error("Failed to delete transaction");
@@ -154,6 +184,7 @@ function TransactionsContent() {
       accountId: txn.accountId,
       categoryId: txn.categoryId,
       toAccountId: txn.toAccountId,
+      merchantId: txn.merchantId ?? null,
       tags: txn.tags || [],
     });
     setFormOpen(true);
@@ -199,7 +230,11 @@ function TransactionsContent() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Smart (AI) search */}
+      <SmartSearch onResult={setAiResult} />
+
+      {/* Filters — hidden while an AI filter is active to avoid confusion */}
+      {!aiResult && (
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -246,17 +281,161 @@ function TransactionsContent() {
             ))}
           </SelectContent>
         </Select>
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => {
+            setStatusFilter(v ?? "all");
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="cleared">Cleared</SelectItem>
+            <SelectItem value="reconciled">Reconciled</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
+      )}
+
+      {/* Bulk actions bar — visible when ≥1 transaction is selected */}
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 p-2 text-sm">
+          <span>{selected.size} selected</span>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={bulkBusy}
+              onClick={async () => {
+                setBulkBusy(true);
+                try {
+                  await bulkSetTransactionStatus(Array.from(selected), "reconciled");
+                  toast.success(`${selected.size} marked reconciled`);
+                  setSelected(new Set());
+                  loadData();
+                } catch {
+                  toast.error("Could not update status");
+                } finally {
+                  setBulkBusy(false);
+                }
+              }}
+            >
+              <CheckCheck className="mr-1 h-4 w-4" /> Mark reconciled
+            </Button>
+            <Select
+              onValueChange={async (categoryId) => {
+                if (!categoryId) return;
+                setBulkBusy(true);
+                try {
+                  await bulkSetCategory(Array.from(selected), categoryId);
+                  toast.success(`Re-categorised ${selected.size} transaction(s)`);
+                  setSelected(new Set());
+                  loadData();
+                } catch {
+                  toast.error("Could not re-categorise");
+                } finally {
+                  setBulkBusy(false);
+                }
+              }}
+            >
+              <SelectTrigger className="h-9 w-[200px]">
+                <SelectValue placeholder="Re-categorise…" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.icon} {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={bulkBusy}
+              onClick={async () => {
+                if (
+                  !confirm(`Delete ${selected.size} transaction(s)? Balances will be reversed.`)
+                )
+                  return;
+                setBulkBusy(true);
+                try {
+                  const ids = Array.from(selected);
+                  const { deleted } = await bulkDeleteTransactions(ids);
+                  toast.success(`Deleted ${deleted} transaction(s)`, {
+                    description:
+                      deleted < ids.length
+                        ? `${ids.length - deleted} could not be deleted.`
+                        : undefined,
+                    action: {
+                      label: "Undo",
+                      onClick: async () => {
+                        try {
+                          const { restored } = await undoBulkDeleteTransactions(ids);
+                          toast.success(`Restored ${restored} transaction(s)`);
+                          loadData();
+                        } catch {
+                          toast.error("Could not undo");
+                        }
+                      },
+                    },
+                    duration: 30_000,
+                  });
+                  setSelected(new Set());
+                  loadData();
+                } catch {
+                  toast.error("Could not delete");
+                } finally {
+                  setBulkBusy(false);
+                }
+              }}
+            >
+              <Trash2 className="mr-1 h-4 w-4" /> Delete
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelected(new Set())}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[40px]">
+                <Checkbox
+                  checked={
+                    transactions.length > 0 &&
+                    transactions.every((t: any) => selected.has(t.id))
+                  }
+                  onCheckedChange={(v) => {
+                    setSelected((prev) => {
+                      const next = new Set(prev);
+                      if (v) {
+                        for (const t of transactions) next.add((t as any).id);
+                      } else {
+                        for (const t of transactions) next.delete((t as any).id);
+                      }
+                      return next;
+                    });
+                  }}
+                />
+              </TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Account</TableHead>
               <TableHead>Date</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="text-right">Amount</TableHead>
               <TableHead className="w-[50px]" />
             </TableRow>
@@ -264,22 +443,41 @@ function TransactionsContent() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-10">
+                <TableCell colSpan={8} className="text-center py-10">
                   Loading...
                 </TableCell>
               </TableRow>
-            ) : transactions.length === 0 ? (
+            ) : (aiResult ? aiResult.transactions : transactions).length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={8}
                   className="text-center py-10 text-muted-foreground"
                 >
                   No transactions found
                 </TableCell>
               </TableRow>
             ) : (
-              transactions.map((txn) => (
-                <TableRow key={txn.id}>
+              (aiResult ? aiResult.transactions : transactions)
+                .filter((txn: any) =>
+                  aiResult || statusFilter === "all"
+                    ? true
+                    : txn.status === statusFilter,
+                )
+                .map((txn: any) => (
+                <TableRow key={txn.id} data-state={selected.has(txn.id) ? "selected" : undefined}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selected.has(txn.id)}
+                      onCheckedChange={(v) => {
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          if (v) next.add(txn.id);
+                          else next.delete(txn.id);
+                          return next;
+                        });
+                      }}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span>{txn.categoryIcon}</span>
@@ -287,6 +485,14 @@ function TransactionsContent() {
                         <span className="font-medium">
                           {txn.description || txn.categoryName}
                         </span>
+                        {txn.isReimbursable && (
+                          <Badge
+                            variant="outline"
+                            className="ml-2 text-[10px] px-1 py-0"
+                          >
+                            {txn.reimbursedAt ? "Reimbursed" : "Reimbursable"}
+                          </Badge>
+                        )}
                         {txn.tags && txn.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-0.5">
                             {txn.tags.map((tag: string) => (
@@ -319,6 +525,20 @@ function TransactionsContent() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {format(parseISO(txn.date), "MMM d, yyyy")}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        txn.status === "reconciled"
+                          ? "default"
+                          : txn.status === "pending"
+                            ? "outline"
+                            : "secondary"
+                      }
+                      className="capitalize"
+                    >
+                      {txn.status ?? "cleared"}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <span
@@ -366,8 +586,8 @@ function TransactionsContent() {
         </Table>
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
+      {/* Pagination — hidden while an AI filter is active (AI results aren't paged) */}
+      {!aiResult && totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
           <Button
             variant="outline"

@@ -7,7 +7,7 @@ import {
   categories,
 } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
-import { eq, and, sql, gte, lte, desc } from "drizzle-orm";
+import { eq, and, sql, gte, lte, desc, isNull } from "drizzle-orm";
 import { startOfMonth, endOfMonth, format } from "date-fns";
 import { isLiabilityAccount } from "@/lib/accounts";
 
@@ -23,14 +23,20 @@ export async function getDashboardData(options?: {
   const dateFrom = options?.from || format(startOfMonth(now), "yyyy-MM-dd");
   const dateTo = options?.to || format(endOfMonth(now), "yyyy-MM-dd");
 
-  // Get all accounts
+  // Get all active accounts
   const accounts = await db
     .select()
     .from(financialAccounts)
-    .where(eq(financialAccounts.userId, userId))
+    .where(
+      and(
+        eq(financialAccounts.userId, userId),
+        eq(financialAccounts.status, "active"),
+      ),
+    )
     .orderBy(desc(financialAccounts.isDefault));
 
-  // Totals for the selected range
+  // Totals for the selected range (excludes soft-deleted, excludes split
+  // children to avoid double-counting against their parent).
   const [rangeTotals] = await db
     .select({
       totalIncome: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${transactions.amount}::numeric ELSE 0 END), 0)`,
@@ -41,6 +47,8 @@ export async function getDashboardData(options?: {
     .where(
       and(
         eq(transactions.userId, userId),
+        isNull(transactions.deletedAt),
+        isNull(transactions.parentId),
         gte(transactions.date, dateFrom),
         lte(transactions.date, dateTo)
       )
@@ -60,7 +68,12 @@ export async function getDashboardData(options?: {
     .where(
       and(
         eq(transactions.userId, userId),
+        isNull(transactions.deletedAt),
         eq(transactions.type, "expense"),
+        // System categories (__split__, __fees__) shouldn't appear in
+        // spending-by-category. Their children / context rows already cover
+        // the real category breakdown.
+        isNull(categories.systemKey),
         gte(transactions.date, dateFrom),
         lte(transactions.date, dateTo)
       )
@@ -89,6 +102,8 @@ export async function getDashboardData(options?: {
     .where(
       and(
         eq(transactions.userId, userId),
+        isNull(transactions.deletedAt),
+        isNull(transactions.parentId),
         gte(transactions.date, trendStart),
         lte(transactions.date, dateTo)
       )
@@ -119,6 +134,8 @@ export async function getDashboardData(options?: {
     .where(
       and(
         eq(transactions.userId, userId),
+        isNull(transactions.deletedAt),
+        isNull(transactions.parentId),
         gte(transactions.date, dateFrom),
         lte(transactions.date, dateTo)
       )

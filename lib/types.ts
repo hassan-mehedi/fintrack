@@ -5,6 +5,23 @@ import type {
   transactions,
   budgets,
   recurringTransactions,
+  postings,
+  fxRates,
+  merchants,
+  entityChanges,
+  attachments,
+  inboundMessages,
+  inboundAliases,
+  inboundTokens,
+  inboundRules,
+  notifications,
+  pushSubscriptions,
+  notificationPreferences,
+  insights,
+  twoFactorSecrets,
+  recoveryCodes,
+  userSessions,
+  transactionTemplates,
 } from "@/lib/db/schema";
 
 // Infer types from Drizzle schema
@@ -25,6 +42,36 @@ export type NewBudget = typeof budgets.$inferInsert;
 
 export type RecurringTransaction = typeof recurringTransactions.$inferSelect;
 export type NewRecurringTransaction = typeof recurringTransactions.$inferInsert;
+
+export type Posting = typeof postings.$inferSelect;
+export type NewPosting = typeof postings.$inferInsert;
+
+export type FxRate = typeof fxRates.$inferSelect;
+export type Merchant = typeof merchants.$inferSelect;
+export type NewMerchant = typeof merchants.$inferInsert;
+export type EntityChange = typeof entityChanges.$inferSelect;
+export type Attachment = typeof attachments.$inferSelect;
+export type NewAttachment = typeof attachments.$inferInsert;
+
+export type InboundMessage = typeof inboundMessages.$inferSelect;
+export type NewInboundMessage = typeof inboundMessages.$inferInsert;
+export type InboundAlias = typeof inboundAliases.$inferSelect;
+export type InboundToken = typeof inboundTokens.$inferSelect;
+export type InboundRule = typeof inboundRules.$inferSelect;
+
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
+
+export type Insight = typeof insights.$inferSelect;
+export type NewInsight = typeof insights.$inferInsert;
+
+export type TwoFactorSecret = typeof twoFactorSecrets.$inferSelect;
+export type RecoveryCode = typeof recoveryCodes.$inferSelect;
+export type UserSession = typeof userSessions.$inferSelect;
+export type TransactionTemplate = typeof transactionTemplates.$inferSelect;
+export type NewTransactionTemplate = typeof transactionTemplates.$inferInsert;
 
 // Extended types with relations
 export type TransactionWithCategory = Transaction & {
