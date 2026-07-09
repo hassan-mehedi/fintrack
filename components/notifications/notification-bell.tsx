@@ -49,9 +49,14 @@ export function NotificationBell() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    const refreshId = window.setTimeout(() => {
+      void refresh();
+    }, 0);
     const id = setInterval(refresh, POLL_MS);
-    return () => clearInterval(id);
+    return () => {
+      window.clearTimeout(refreshId);
+      clearInterval(id);
+    };
   }, [refresh]);
 
   // Also refresh when a service-worker push arrives — the SW shows the system
@@ -84,15 +89,15 @@ export function NotificationBell() {
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="relative">
-          <Bell className="h-4 w-4" />
-          {unread > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-medium text-white">
-              {unread > 99 ? "99+" : unread}
-            </span>
-          )}
-        </Button>
+      <DropdownMenuTrigger
+        render={<Button variant="ghost" size="sm" className="relative" />}
+      >
+        <Bell className="h-4 w-4" />
+        {unread > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-medium text-white">
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 p-0">
         <div className="flex items-center justify-between border-b px-3 py-2">

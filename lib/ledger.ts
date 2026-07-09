@@ -17,10 +17,10 @@ import {
   postings,
   financialAccounts,
   categories,
+  merchants,
   users,
 } from "@/lib/db/schema";
 import { and, eq, sql } from "drizzle-orm";
-import { neon } from "@neondatabase/serverless";
 import { getRate } from "@/lib/fx";
 import { isLiabilityAccount } from "@/lib/accounts";
 import { onTransactionPosted } from "@/lib/notifications/events";
@@ -57,15 +57,21 @@ type AccountRow = {
   currency: string;
 };
 
-async function loadAccount(id: string): Promise<AccountRow> {
-  const [row] = await db
+type DbClient = typeof db;
+
+async function loadAccount(
+  id: string,
+  userId: string,
+  client: DbClient = db,
+): Promise<AccountRow> {
+  const [row] = await client
     .select({
       id: financialAccounts.id,
       type: financialAccounts.type,
       currency: financialAccounts.currency,
     })
     .from(financialAccounts)
-    .where(eq(financialAccounts.id, id))
+    .where(and(eq(financialAccounts.id, id), eq(financialAccounts.userId, userId)))
     .limit(1);
   if (!row) throw new Error(`account ${id} not found`);
   return row;
@@ -81,14 +87,40 @@ async function getBaseCurrency(userId: string): Promise<string> {
   return row.currency;
 }
 
-async function ensureFeesCategory(userId: string): Promise<string> {
-  const [existing] = await db
+async function ensureCategory(
+  id: string,
+  userId: string,
+  client: DbClient = db,
+): Promise<void> {
+  const [row] = await client
+    .select({ id: categories.id })
+    .from(categories)
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
+    .limit(1);
+  if (!row) throw new Error(`category ${id} not found`);
+}
+
+async function ensureMerchant(
+  id: string,
+  userId: string,
+  client: DbClient = db,
+): Promise<void> {
+  const [row] = await client
+    .select({ id: merchants.id })
+    .from(merchants)
+    .where(and(eq(merchants.id, id), eq(merchants.userId, userId)))
+    .limit(1);
+  if (!row) throw new Error(`merchant ${id} not found`);
+}
+
+async function ensureFeesCategory(userId: string, client: DbClient = db): Promise<string> {
+  const [existing] = await client
     .select({ id: categories.id })
     .from(categories)
     .where(and(eq(categories.userId, userId), eq(categories.systemKey, FEES_SYSTEM_KEY)))
     .limit(1);
   if (existing) return existing.id;
-  const [created] = await db
+  const [created] = await client
     .insert(categories)
     .values({
       userId,
@@ -103,14 +135,14 @@ async function ensureFeesCategory(userId: string): Promise<string> {
   return created.id;
 }
 
-async function ensureSplitCategory(userId: string): Promise<string> {
-  const [existing] = await db
+async function ensureSplitCategory(userId: string, client: DbClient = db): Promise<string> {
+  const [existing] = await client
     .select({ id: categories.id })
     .from(categories)
     .where(and(eq(categories.userId, userId), eq(categories.systemKey, SPLIT_SYSTEM_KEY)))
     .limit(1);
   if (existing) return existing.id;
-  const [created] = await db
+  const [created] = await client
     .insert(categories)
     .values({
       userId,
@@ -194,8 +226,11 @@ export function computeLegs(input: LegInputs): Leg[] {
 }
 
 async function buildLegs(input: LedgerInput): Promise<Leg[]> {
-  const source = await loadAccount(input.accountId);
-  const destination = input.toAccountId ? await loadAccount(input.toAccountId) : undefined;
+  await ensureCategory(input.categoryId, input.userId);
+  const source = await loadAccount(input.accountId, input.userId);
+  const destination = input.toAccountId
+    ? await loadAccount(input.toAccountId, input.userId)
+    : undefined;
   // Fees category is only needed when there is a fee.
   const feesCategoryId =
     input.fee > 0 ? await ensureFeesCategory(input.userId) : "";
@@ -250,6 +285,7 @@ async function applyAccountBalances(
   legs: Array<{ accountId?: string; amount: number }>,
   accountTypes: Map<string, string>,
   direction: 1 | -1,
+  client: DbClient = db,
 ): Promise<void> {
   for (const leg of legs) {
     if (!leg.accountId) continue;
@@ -257,7 +293,7 @@ async function applyAccountBalances(
     if (!t) continue;
     const delta = isLiabilityAccount(t) ? -leg.amount : leg.amount;
     const signed = delta * direction;
-    await db
+    await client
       .update(financialAccounts)
       .set({
         balance: sql`${financialAccounts.balance}::numeric + ${signed.toFixed(4)}`,
@@ -267,11 +303,16 @@ async function applyAccountBalances(
   }
 }
 
-async function loadAccountTypes(ids: string[]): Promise<Map<string, string>> {
+async function loadAccountTypes(
+  ids: string[],
+  userId: string,
+  client: DbClient = db,
+): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
-  const rows = await db
+  const rows = await client
     .select({ id: financialAccounts.id, type: financialAccounts.type })
-    .from(financialAccounts);
+    .from(financialAccounts)
+    .where(eq(financialAccounts.userId, userId));
   return new Map(rows.filter((r) => ids.includes(r.id)).map((r) => [r.id, r.type]));
 }
 
@@ -296,14 +337,14 @@ export async function postTransaction(input: LedgerInput): Promise<{ id: string 
   }
 
   const baseCurrency = await getBaseCurrency(input.userId);
+  if (input.merchantId) await ensureMerchant(input.merchantId, input.userId);
   const legs = await buildLegs(input);
   const converted = await convertLegsToBase(legs, baseCurrency, input.date);
   assertZeroSum(converted, "postTransaction");
 
-  const sqlClient = neon(process.env.DATABASE_URL!);
-  await sqlClient`BEGIN`;
-  try {
-    const [txn] = await db
+  const txn = await db.transaction(async (tx) => {
+    const client = tx as unknown as DbClient;
+    const [txn] = await client
       .insert(transactions)
       .values({
         userId: input.userId,
@@ -327,7 +368,7 @@ export async function postTransaction(input: LedgerInput): Promise<{ id: string 
       })
       .returning({ id: transactions.id });
 
-    await db.insert(postings).values(
+    await client.insert(postings).values(
       converted.map((l) => ({
         transactionId: txn.id,
         userId: input.userId,
@@ -343,29 +384,26 @@ export async function postTransaction(input: LedgerInput): Promise<{ id: string 
     );
 
     const accountIds = converted.map((l) => l.accountId).filter(Boolean) as string[];
-    const types = await loadAccountTypes(accountIds);
-    await applyAccountBalances(converted, types, 1);
-
-    await sqlClient`COMMIT`;
-
-    // Notifications run AFTER commit so a push failure can't roll back the
-    // financial write. Fire-and-forget; the dispatcher logs its own errors.
-    onTransactionPosted({
-      userId: input.userId,
-      transactionId: txn.id,
-      type: input.type,
-      categoryId: input.categoryId,
-      amount: input.amount,
-      date: input.date,
-    }).catch((err) =>
-      logger.warn({ err, userId: input.userId }, "transaction notification dispatch failed"),
-    );
+    const types = await loadAccountTypes(accountIds, input.userId, client);
+    await applyAccountBalances(converted, types, 1, client);
 
     return txn;
-  } catch (err) {
-    await sqlClient`ROLLBACK`;
-    throw err;
-  }
+  });
+
+  // Notifications run AFTER commit so a push failure can't roll back the
+  // financial write. Fire-and-forget; the dispatcher logs its own errors.
+  onTransactionPosted({
+    userId: input.userId,
+    transactionId: txn.id,
+    type: input.type,
+    categoryId: input.categoryId,
+    amount: input.amount,
+    date: input.date,
+  }).catch((err) =>
+    logger.warn({ err, userId: input.userId }, "transaction notification dispatch failed"),
+  );
+
+  return txn;
 }
 
 // ── Splits ─────────────────────────────────────────────
@@ -438,76 +476,145 @@ export async function postSplitTransaction(
   }
 
   const splitCategoryId = await ensureSplitCategory(input.userId);
+  if (input.merchantId) await ensureMerchant(input.merchantId, input.userId);
+  await Promise.all(
+    input.children.map((child) => ensureCategory(child.categoryId, input.userId)),
+  );
 
-  // Step 1: post the parent as a regular transaction but with the split-virtual
-  // category. This handles the account leg, idempotency, audit-friendly insert,
-  // and post-commit notification firing.
-  const parent = await postTransaction({
+  const parentInput: LedgerInput = {
     ...input,
     categoryId: splitCategoryId,
-  });
+  };
 
-  // Step 2: insert child rows + their (split, category) postings.
   const baseCurrency = await getBaseCurrency(input.userId);
-  const sourceAccount = await loadAccount(input.accountId);
+  const parentLegs = await buildLegs(parentInput);
+  const parentConverted = await convertLegsToBase(
+    parentLegs,
+    baseCurrency,
+    input.date,
+  );
+  assertZeroSum(parentConverted, "postSplitTransaction");
+
+  const sourceAccount = await loadAccount(input.accountId, input.userId);
   const fxRate =
     sourceAccount.currency === baseCurrency
       ? 1
       : await getRate(input.date, sourceAccount.currency, baseCurrency);
 
-  const childIds: string[] = [];
-  for (const child of input.children) {
-    // Income child: split-virtual +child, category -child  (income is credit-natured)
-    // Expense child: split-virtual -child, category +child
-    const splitAmt = input.type === "income" ? child.amount : -child.amount;
-    const catAmt = input.type === "income" ? -child.amount : child.amount;
-
-    const [row] = await db
+  const result = await db.transaction(async (tx) => {
+    const client = tx as unknown as DbClient;
+    const [parent] = await client
       .insert(transactions)
       .values({
-        userId: input.userId,
-        accountId: input.accountId,
-        categoryId: child.categoryId,
-        amount: fmt(child.amount),
-        fee: "0",
-        type: input.type,
-        status: input.status ?? "cleared",
-        source: input.source ?? "manual",
-        description: child.description ?? "",
-        date: input.date,
-        tags: [],
-        parentId: parent.id,
+        userId: parentInput.userId,
+        accountId: parentInput.accountId,
+        toAccountId: parentInput.toAccountId ?? null,
+        categoryId: parentInput.categoryId,
+        merchantId: parentInput.merchantId ?? null,
+        amount: fmt(parentInput.amount),
+        fee: fmt(parentInput.fee),
+        type: parentInput.type,
+        status: parentInput.status ?? "cleared",
+        source: parentInput.source ?? "manual",
+        description: parentInput.description ?? "",
+        date: parentInput.date,
+        tags: parentInput.tags ?? [],
+        recurringId: parentInput.recurringId ?? null,
+        externalId: parentInput.externalId ?? null,
+        importBatchId: parentInput.importBatchId ?? null,
+        idempotencyKey: parentInput.idempotencyKey ?? null,
+        isReimbursable: parentInput.isReimbursable ?? false,
       })
       .returning({ id: transactions.id });
 
-    await db.insert(postings).values([
-      {
-        transactionId: row.id,
+    await client.insert(postings).values(
+      parentConverted.map((l) => ({
+        transactionId: parent.id,
         userId: input.userId,
-        categoryId: splitCategoryId,
-        amount: fmt(splitAmt),
-        currency: sourceAccount.currency,
-        baseAmount: fmt(splitAmt * fxRate),
+        accountId: l.accountId ?? null,
+        categoryId: l.categoryId ?? null,
+        amount: fmt(l.amount),
+        currency: l.currency,
+        baseAmount: fmt(l.baseAmount),
         baseCurrency,
-        fxRate: fxRate.toFixed(8),
+        fxRate: l.fxRate.toFixed(8),
         date: input.date,
-      },
-      {
-        transactionId: row.id,
-        userId: input.userId,
-        categoryId: child.categoryId,
-        amount: fmt(catAmt),
-        currency: sourceAccount.currency,
-        baseAmount: fmt(catAmt * fxRate),
-        baseCurrency,
-        fxRate: fxRate.toFixed(8),
-        date: input.date,
-      },
-    ]);
-    childIds.push(row.id);
-  }
+      })),
+    );
 
-  return { parentId: parent.id, childIds };
+    const accountIds = parentConverted
+      .map((l) => l.accountId)
+      .filter(Boolean) as string[];
+    const types = await loadAccountTypes(accountIds, input.userId, client);
+    await applyAccountBalances(parentConverted, types, 1, client);
+
+    const childIds: string[] = [];
+    for (const child of input.children) {
+      // Income child: split-virtual +child, category -child.
+      // Expense child: split-virtual -child, category +child.
+      const splitAmt = input.type === "income" ? child.amount : -child.amount;
+      const catAmt = input.type === "income" ? -child.amount : child.amount;
+
+      const [row] = await client
+        .insert(transactions)
+        .values({
+          userId: input.userId,
+          accountId: input.accountId,
+          categoryId: child.categoryId,
+          amount: fmt(child.amount),
+          fee: "0",
+          type: input.type,
+          status: input.status ?? "cleared",
+          source: input.source ?? "manual",
+          description: child.description ?? "",
+          date: input.date,
+          tags: [],
+          parentId: parent.id,
+        })
+        .returning({ id: transactions.id });
+
+      await client.insert(postings).values([
+        {
+          transactionId: row.id,
+          userId: input.userId,
+          categoryId: splitCategoryId,
+          amount: fmt(splitAmt),
+          currency: sourceAccount.currency,
+          baseAmount: fmt(splitAmt * fxRate),
+          baseCurrency,
+          fxRate: fxRate.toFixed(8),
+          date: input.date,
+        },
+        {
+          transactionId: row.id,
+          userId: input.userId,
+          categoryId: child.categoryId,
+          amount: fmt(catAmt),
+          currency: sourceAccount.currency,
+          baseAmount: fmt(catAmt * fxRate),
+          baseCurrency,
+          fxRate: fxRate.toFixed(8),
+          date: input.date,
+        },
+      ]);
+      childIds.push(row.id);
+    }
+
+    return { parentId: parent.id, childIds };
+  });
+
+  onTransactionPosted({
+    userId: input.userId,
+    transactionId: result.parentId,
+    type: input.type,
+    categoryId: splitCategoryId,
+    amount: input.amount,
+    date: input.date,
+  }).catch((err) =>
+    logger.warn({ err, userId: input.userId }, "split notification dispatch failed"),
+  );
+
+  return result;
 }
 
 /**
@@ -526,70 +633,162 @@ export async function rewriteSplitTransaction(args: {
   });
 
   const splitCategoryId = await ensureSplitCategory(args.input.userId);
+  if (args.input.merchantId) {
+    await ensureMerchant(args.input.merchantId, args.input.userId);
+  }
+  await Promise.all(
+    args.input.children.map((child) =>
+      ensureCategory(child.categoryId, args.input.userId),
+    ),
+  );
 
-  // Delete all child transactions (cascades their postings via FK).
-  await db.delete(transactions).where(eq(transactions.parentId, args.parentId));
-
-  // Rewrite the parent with the (still) split-virtual category.
-  await rewriteTransaction(args.parentId, {
+  const parentInput: LedgerInput = {
     ...args.input,
     categoryId: splitCategoryId,
-  });
+  };
 
-  // Re-add children.
   const baseCurrency = await getBaseCurrency(args.input.userId);
-  const sourceAccount = await loadAccount(args.input.accountId);
+  const newLegs = await buildLegs(parentInput);
+  const newConverted = await convertLegsToBase(
+    newLegs,
+    baseCurrency,
+    args.input.date,
+  );
+  assertZeroSum(newConverted, "rewriteSplitTransaction");
+
+  const sourceAccount = await loadAccount(args.input.accountId, args.input.userId);
   const fxRate =
     sourceAccount.currency === baseCurrency
       ? 1
       : await getRate(args.input.date, sourceAccount.currency, baseCurrency);
 
-  for (const child of args.input.children) {
-    const splitAmt = args.input.type === "income" ? child.amount : -child.amount;
-    const catAmt = args.input.type === "income" ? -child.amount : child.amount;
-    const [row] = await db
-      .insert(transactions)
-      .values({
-        userId: args.input.userId,
-        accountId: args.input.accountId,
-        categoryId: child.categoryId,
-        amount: fmt(child.amount),
-        fee: "0",
-        type: args.input.type,
-        status: args.input.status ?? "cleared",
-        source: args.input.source ?? "manual",
-        description: child.description ?? "",
-        date: args.input.date,
-        tags: [],
-        parentId: args.parentId,
-      })
-      .returning({ id: transactions.id });
+  await db.transaction(async (tx) => {
+    const client = tx as unknown as DbClient;
 
-    await db.insert(postings).values([
-      {
-        transactionId: row.id,
+    await client
+      .delete(transactions)
+      .where(
+        and(
+          eq(transactions.parentId, args.parentId),
+          eq(transactions.userId, args.input.userId),
+        ),
+      );
+
+    const oldPostings = await client
+      .select({ accountId: postings.accountId, amount: postings.amount })
+      .from(postings)
+      .where(eq(postings.transactionId, args.parentId));
+
+    const allAccountIds = [
+      ...new Set(
+        [
+          ...oldPostings.map((p) => p.accountId),
+          ...newConverted.map((l) => l.accountId),
+        ].filter(Boolean) as string[],
+      ),
+    ];
+    const types = await loadAccountTypes(allAccountIds, args.input.userId, client);
+
+    await applyAccountBalances(
+      oldPostings.map((p) => ({
+        accountId: p.accountId ?? undefined,
+        amount: Number(p.amount),
+      })),
+      types,
+      -1,
+      client,
+    );
+
+    await client.delete(postings).where(eq(postings.transactionId, args.parentId));
+
+    await client
+      .update(transactions)
+      .set({
+        accountId: parentInput.accountId,
+        toAccountId: parentInput.toAccountId ?? null,
+        categoryId: parentInput.categoryId,
+        merchantId: parentInput.merchantId ?? null,
+        amount: fmt(parentInput.amount),
+        fee: fmt(parentInput.fee),
+        type: parentInput.type,
+        status: parentInput.status ?? "cleared",
+        description: parentInput.description ?? "",
+        date: parentInput.date,
+        tags: parentInput.tags ?? [],
+        isReimbursable: parentInput.isReimbursable ?? false,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(transactions.id, args.parentId),
+          eq(transactions.userId, args.input.userId),
+        ),
+      );
+
+    await client.insert(postings).values(
+      newConverted.map((l) => ({
+        transactionId: args.parentId,
         userId: args.input.userId,
-        categoryId: splitCategoryId,
-        amount: fmt(splitAmt),
-        currency: sourceAccount.currency,
-        baseAmount: fmt(splitAmt * fxRate),
+        accountId: l.accountId ?? null,
+        categoryId: l.categoryId ?? null,
+        amount: fmt(l.amount),
+        currency: l.currency,
+        baseAmount: fmt(l.baseAmount),
         baseCurrency,
-        fxRate: fxRate.toFixed(8),
+        fxRate: l.fxRate.toFixed(8),
         date: args.input.date,
-      },
-      {
-        transactionId: row.id,
-        userId: args.input.userId,
-        categoryId: child.categoryId,
-        amount: fmt(catAmt),
-        currency: sourceAccount.currency,
-        baseAmount: fmt(catAmt * fxRate),
-        baseCurrency,
-        fxRate: fxRate.toFixed(8),
-        date: args.input.date,
-      },
-    ]);
-  }
+      })),
+    );
+
+    await applyAccountBalances(newConverted, types, 1, client);
+
+    for (const child of args.input.children) {
+      const splitAmt = args.input.type === "income" ? child.amount : -child.amount;
+      const catAmt = args.input.type === "income" ? -child.amount : child.amount;
+      const [row] = await client
+        .insert(transactions)
+        .values({
+          userId: args.input.userId,
+          accountId: args.input.accountId,
+          categoryId: child.categoryId,
+          amount: fmt(child.amount),
+          fee: "0",
+          type: args.input.type,
+          status: args.input.status ?? "cleared",
+          source: args.input.source ?? "manual",
+          description: child.description ?? "",
+          date: args.input.date,
+          tags: [],
+          parentId: args.parentId,
+        })
+        .returning({ id: transactions.id });
+
+      await client.insert(postings).values([
+        {
+          transactionId: row.id,
+          userId: args.input.userId,
+          categoryId: splitCategoryId,
+          amount: fmt(splitAmt),
+          currency: sourceAccount.currency,
+          baseAmount: fmt(splitAmt * fxRate),
+          baseCurrency,
+          fxRate: fxRate.toFixed(8),
+          date: args.input.date,
+        },
+        {
+          transactionId: row.id,
+          userId: args.input.userId,
+          categoryId: child.categoryId,
+          amount: fmt(catAmt),
+          currency: sourceAccount.currency,
+          baseAmount: fmt(catAmt * fxRate),
+          baseCurrency,
+          fxRate: fxRate.toFixed(8),
+          date: args.input.date,
+        },
+      ]);
+    }
+  });
 }
 
 /**
@@ -601,14 +800,14 @@ export async function rewriteTransaction(
   input: LedgerInput,
 ): Promise<void> {
   const baseCurrency = await getBaseCurrency(input.userId);
+  if (input.merchantId) await ensureMerchant(input.merchantId, input.userId);
   const newLegs = await buildLegs(input);
   const newConverted = await convertLegsToBase(newLegs, baseCurrency, input.date);
   assertZeroSum(newConverted, "rewriteTransaction");
 
-  const sqlClient = neon(process.env.DATABASE_URL!);
-  await sqlClient`BEGIN`;
-  try {
-    const oldPostings = await db
+  await db.transaction(async (tx) => {
+    const client = tx as unknown as DbClient;
+    const oldPostings = await client
       .select({ accountId: postings.accountId, amount: postings.amount })
       .from(postings)
       .where(eq(postings.transactionId, transactionId));
@@ -621,18 +820,19 @@ export async function rewriteTransaction(
         ].filter(Boolean) as string[],
       ),
     ];
-    const types = await loadAccountTypes(allAccountIds);
+    const types = await loadAccountTypes(allAccountIds, input.userId, client);
 
     // Reverse old account effects
     await applyAccountBalances(
       oldPostings.map((p) => ({ accountId: p.accountId ?? undefined, amount: Number(p.amount) })),
       types,
       -1,
+      client,
     );
 
-    await db.delete(postings).where(eq(postings.transactionId, transactionId));
+    await client.delete(postings).where(eq(postings.transactionId, transactionId));
 
-    await db
+    await client
       .update(transactions)
       .set({
         accountId: input.accountId,
@@ -653,7 +853,7 @@ export async function rewriteTransaction(
         and(eq(transactions.id, transactionId), eq(transactions.userId, input.userId)),
       );
 
-    await db.insert(postings).values(
+    await client.insert(postings).values(
       newConverted.map((l) => ({
         transactionId,
         userId: input.userId,
@@ -668,12 +868,8 @@ export async function rewriteTransaction(
       })),
     );
 
-    await applyAccountBalances(newConverted, types, 1);
-    await sqlClient`COMMIT`;
-  } catch (err) {
-    await sqlClient`ROLLBACK`;
-    throw err;
-  }
+    await applyAccountBalances(newConverted, types, 1, client);
+  });
 }
 
 /**
@@ -686,10 +882,9 @@ export async function restoreTransaction(args: {
   transactionId: string;
   userId: string;
 }): Promise<void> {
-  const sqlClient = neon(process.env.DATABASE_URL!);
-  await sqlClient`BEGIN`;
-  try {
-    const [txn] = await db
+  await db.transaction(async (tx) => {
+    const client = tx as unknown as DbClient;
+    const [txn] = await client
       .select({
         id: transactions.id,
         deletedAt: transactions.deletedAt,
@@ -703,22 +898,23 @@ export async function restoreTransaction(args: {
     if (!txn) throw new Error("transaction not found");
     if (!txn.deletedAt) return; // already live
 
-    const ps = await db
+    const ps = await client
       .select({ accountId: postings.accountId, amount: postings.amount })
       .from(postings)
       .where(eq(postings.transactionId, args.transactionId));
 
     const accountIds = ps.map((p) => p.accountId).filter(Boolean) as string[];
-    const types = await loadAccountTypes(accountIds);
+    const types = await loadAccountTypes(accountIds, args.userId, client);
 
     // Re-apply (direction = +1).
     await applyAccountBalances(
       ps.map((p) => ({ accountId: p.accountId ?? undefined, amount: Number(p.amount) })),
       types,
       1,
+      client,
     );
 
-    await db
+    await client
       .update(transactions)
       .set({
         deletedAt: null,
@@ -730,7 +926,7 @@ export async function restoreTransaction(args: {
       .where(eq(transactions.id, args.transactionId));
 
     // Bring back any split children we soft-deleted alongside the parent.
-    await db
+    await client
       .update(transactions)
       .set({ deletedAt: null, status: "cleared", updatedAt: new Date() })
       .where(
@@ -739,12 +935,7 @@ export async function restoreTransaction(args: {
           eq(transactions.userId, args.userId),
         ),
       );
-
-    await sqlClient`COMMIT`;
-  } catch (err) {
-    await sqlClient`ROLLBACK`;
-    throw err;
-  }
+  });
 }
 
 /**
@@ -756,10 +947,9 @@ export async function voidTransaction(args: {
   transactionId: string;
   userId: string;
 }): Promise<void> {
-  const sqlClient = neon(process.env.DATABASE_URL!);
-  await sqlClient`BEGIN`;
-  try {
-    const [txn] = await db
+  await db.transaction(async (tx) => {
+    const client = tx as unknown as DbClient;
+    const [txn] = await client
       .select({ id: transactions.id, deletedAt: transactions.deletedAt })
       .from(transactions)
       .where(
@@ -769,21 +959,22 @@ export async function voidTransaction(args: {
     if (!txn) throw new Error("transaction not found");
     if (txn.deletedAt) return;
 
-    const ps = await db
+    const ps = await client
       .select({ accountId: postings.accountId, amount: postings.amount })
       .from(postings)
       .where(eq(postings.transactionId, args.transactionId));
 
     const accountIds = ps.map((p) => p.accountId).filter(Boolean) as string[];
-    const types = await loadAccountTypes(accountIds);
+    const types = await loadAccountTypes(accountIds, args.userId, client);
 
     await applyAccountBalances(
       ps.map((p) => ({ accountId: p.accountId ?? undefined, amount: Number(p.amount) })),
       types,
       -1,
+      client,
     );
 
-    await db
+    await client
       .update(transactions)
       .set({ deletedAt: new Date(), status: "void", updatedAt: new Date() })
       .where(eq(transactions.id, args.transactionId));
@@ -791,7 +982,7 @@ export async function voidTransaction(args: {
     // If this transaction has split children, soft-delete them as well.
     // Children carry no account postings (split-virtual ↔ category only), so
     // there's no balance to reverse — just mark them deleted.
-    await db
+    await client
       .update(transactions)
       .set({ deletedAt: new Date(), status: "void", updatedAt: new Date() })
       .where(
@@ -800,10 +991,5 @@ export async function voidTransaction(args: {
           eq(transactions.userId, args.userId),
         ),
       );
-
-    await sqlClient`COMMIT`;
-  } catch (err) {
-    await sqlClient`ROLLBACK`;
-    throw err;
-  }
+  });
 }

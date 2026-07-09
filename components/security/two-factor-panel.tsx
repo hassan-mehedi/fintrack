@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import {
   Card,
   CardHeader,
@@ -192,11 +193,12 @@ export function TwoFactorPanel() {
               Scan this QR with your authenticator app, then enter the 6-digit
               code it shows.
             </p>
-            <img
+            <Image
               src={enrollment.qrDataUrl}
               alt="2FA QR code"
               width={240}
               height={240}
+              unoptimized
               className="rounded-md border bg-white p-2"
             />
             <details className="text-xs text-muted-foreground">

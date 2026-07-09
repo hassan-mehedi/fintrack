@@ -65,6 +65,45 @@ import type { FinancialAccount, Category } from "@/lib/types";
 import { DateRangePicker } from "@/components/layout/date-range-picker";
 import { useFormatCurrency } from "@/components/providers/currency-provider";
 
+type TransactionRow = {
+  id: string;
+  amount: number;
+  fee: number;
+  type: "income" | "expense" | "transfer";
+  status: "pending" | "cleared" | "reconciled" | "void";
+  source?: string;
+  description: string;
+  date: string;
+  tags: string[];
+  categoryId: string;
+  categoryName: string;
+  categoryIcon: string;
+  categoryColor: string;
+  accountId: string;
+  accountName: string;
+  toAccountId: string | null;
+  merchantId: string | null;
+  merchantName?: string | null;
+  isReimbursable: boolean;
+  reimbursedAt?: Date | null;
+  createdAt: Date;
+};
+
+type TransactionForEdit = Pick<
+  TransactionRow,
+  | "id"
+  | "type"
+  | "amount"
+  | "fee"
+  | "description"
+  | "date"
+  | "accountId"
+  | "categoryId"
+  | "toAccountId"
+  | "merchantId"
+  | "tags"
+>;
+
 export default function TransactionsPage() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center py-20 text-muted-foreground">Loading...</div>}>
@@ -79,7 +118,7 @@ function TransactionsContent() {
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
 
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [total, setTotal] = useState(0);
@@ -94,7 +133,7 @@ function TransactionsContent() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [aiResult, setAiResult] = useState<SmartSearchResult | null>(null);
-  const [editingTransaction, setEditingTransaction] = useState<any>(null);
+  const [editingTransaction, setEditingTransaction] = useState<TransactionForEdit | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -135,7 +174,7 @@ function TransactionsContent() {
         startDate: dateFrom,
         endDate: dateTo,
       });
-      setTransactions(txnData.transactions);
+      setTransactions(txnData.transactions as TransactionRow[]);
       setTotal(txnData.total);
       setTotalPages(txnData.totalPages);
     } catch {
@@ -173,7 +212,7 @@ function TransactionsContent() {
     }
   };
 
-  const handleEdit = (txn: any) => {
+  const handleEdit = (txn: TransactionRow) => {
     setEditingTransaction({
       id: txn.id,
       type: txn.type,
@@ -327,7 +366,8 @@ function TransactionsContent() {
               <CheckCheck className="mr-1 h-4 w-4" /> Mark reconciled
             </Button>
             <Select
-              onValueChange={async (categoryId) => {
+              onValueChange={async (value) => {
+                const categoryId = String(value);
                 if (!categoryId) return;
                 setBulkBusy(true);
                 try {
@@ -416,15 +456,15 @@ function TransactionsContent() {
                 <Checkbox
                   checked={
                     transactions.length > 0 &&
-                    transactions.every((t: any) => selected.has(t.id))
+                    transactions.every((t) => selected.has(t.id))
                   }
                   onCheckedChange={(v) => {
                     setSelected((prev) => {
                       const next = new Set(prev);
                       if (v) {
-                        for (const t of transactions) next.add((t as any).id);
+                        for (const t of transactions) next.add(t.id);
                       } else {
-                        for (const t of transactions) next.delete((t as any).id);
+                        for (const t of transactions) next.delete(t.id);
                       }
                       return next;
                     });
@@ -457,13 +497,13 @@ function TransactionsContent() {
                 </TableCell>
               </TableRow>
             ) : (
-              (aiResult ? aiResult.transactions : transactions)
-                .filter((txn: any) =>
+              ((aiResult ? aiResult.transactions : transactions) as TransactionRow[])
+                .filter((txn) =>
                   aiResult || statusFilter === "all"
                     ? true
                     : txn.status === statusFilter,
                 )
-                .map((txn: any) => (
+                .map((txn) => (
                 <TableRow key={txn.id} data-state={selected.has(txn.id) ? "selected" : undefined}>
                   <TableCell>
                     <Checkbox

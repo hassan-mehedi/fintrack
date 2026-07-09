@@ -7,7 +7,7 @@ import {
   categories,
 } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, lte } from "drizzle-orm";
 import { recurringTransactionSchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
 import {

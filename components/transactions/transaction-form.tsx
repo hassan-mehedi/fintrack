@@ -154,7 +154,7 @@ export function TransactionForm({
       setSplitEnabled(false);
       setSplitRows([]);
     }
-  }, [transaction, open]);
+  }, [transaction, open, accounts, form]);
 
   const transactionType = form.watch("type");
   const selectedAccountId = form.watch("accountId");
@@ -614,7 +614,7 @@ export function TransactionForm({
                   <div>
                     <p className="font-medium text-sm">Split into multiple categories</p>
                     <p className="text-xs text-muted-foreground">
-                      e.g. one Costco run that's groceries + household.
+                      e.g. one Costco run that&apos;s groceries + household.
                     </p>
                   </div>
                   <Switch

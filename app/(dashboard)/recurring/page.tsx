@@ -11,7 +11,7 @@ import { getAccounts } from "@/lib/actions/accounts";
 import { getCategories } from "@/lib/actions/categories";
 import { RecurringForm } from "@/components/recurring/recurring-form";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -35,13 +35,27 @@ import type { FinancialAccount, Category } from "@/lib/types";
 import { FREQUENCY_LABELS } from "@/lib/types";
 import { useFormatCurrency } from "@/components/providers/currency-provider";
 
+type RecurringRule = Awaited<ReturnType<typeof getRecurringTransactions>>[number];
+type RecurringEditData = {
+  id: string;
+  accountId: string;
+  categoryId: string;
+  amount: number;
+  fee: number;
+  type: "income" | "expense";
+  description: string;
+  frequency: RecurringRule["frequency"];
+  startDate: string;
+  endDate: string | null;
+};
+
 export default function RecurringPage() {
   const formatCurrency = useFormatCurrency();
-  const [rules, setRules] = useState<any[]>([]);
+  const [rules, setRules] = useState<RecurringRule[]>([]);
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [formOpen, setFormOpen] = useState(false);
-  const [editData, setEditData] = useState<any>(null);
+  const [editData, setEditData] = useState<RecurringEditData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -104,7 +118,12 @@ export default function RecurringPage() {
     }
   };
 
-  const handleEdit = (rule: any) => {
+  const handleEdit = (rule: RecurringRule) => {
+    if (rule.type === "transfer") {
+      toast.error("Recurring transfers are not supported by this form");
+      return;
+    }
+
     setEditData({
       id: rule.id,
       accountId: rule.accountId,

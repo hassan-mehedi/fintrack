@@ -27,6 +27,7 @@ export type InsightDraft = {
     | "outlier"
     | "subscription_creep"
     | "cashflow_warning"
+    | "weekly_digest"
     | "savings_tip"
     | "large_share"
     | "recurring_drift";
@@ -312,4 +313,3 @@ export async function detectAllForUser(userId: string): Promise<InsightDraft[]> 
   ]);
   return [...d, ...o, ...s];
 }
-

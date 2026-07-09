@@ -1,7 +1,7 @@
 /**
- * Phase 1 backfill — run ONCE after `npm run db:push` has applied the new schema.
+ * Phase 1 backfill — run ONCE after `npm run db:migrate` has applied the new schema.
  *
- *   npm run db:push
+ *   npm run db:migrate
  *   node --experimental-strip-types --env-file=.env scripts/phase1-backfill.ts
  *
  * What this does (idempotent):
@@ -20,14 +20,14 @@
 import "dotenv/config";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   users,
   financialAccounts,
   categories,
   transactions,
   postings,
-} from "../lib/db/schema.ts";
+} from "../lib/db/schema";
 
 const FEES_SYSTEM_KEY = "__fees__";
 
@@ -48,7 +48,7 @@ if (!process.env.DATABASE_URL) {
 const client = neon(process.env.DATABASE_URL);
 const db = drizzle(client);
 
-async function ensureFeesCategory(userId: string, userCurrency: string): Promise<string> {
+async function ensureFeesCategory(userId: string): Promise<string> {
   const [existing] = await db
     .select({ id: categories.id })
     .from(categories)
@@ -133,7 +133,7 @@ async function backfillUser(userId: string, baseCurrency: string) {
 
   let feesCategoryId: string | null = null;
   const ensureFees = async (): Promise<string> => {
-    if (!feesCategoryId) feesCategoryId = await ensureFeesCategory(userId, baseCurrency);
+    if (!feesCategoryId) feesCategoryId = await ensureFeesCategory(userId);
     return feesCategoryId;
   };
 

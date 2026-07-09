@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loader2, Paperclip, Trash2, Wand2 } from "lucide-react";
@@ -42,18 +42,18 @@ export function ReceiptUploader({ transactionId, onApplyOcr }: ReceiptUploaderPr
   const [rows, setRows] = useState<AttachmentRow[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       const data = (await getAttachmentsForTransaction(transactionId)) as AttachmentRow[];
       setRows(data);
     } catch {
       // unauthorized / missing — leave list empty
     }
-  };
+  }, [transactionId]);
 
   useEffect(() => {
     void refresh();
-  }, [transactionId]);
+  }, [refresh]);
 
   const handleFile = async (file: File) => {
     if (file.size > MAX_SIZE) {

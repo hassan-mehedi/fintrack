@@ -16,7 +16,7 @@ describe("normalizeMerchantName", () => {
 
   it("strips dashes, slashes, parentheses", () => {
     expect(normalizeMerchantName("Pathao - Banani (Dhaka)")).toBe(
-      "pathao  banani dhaka",
+      "pathao banani dhaka",
     );
   });
 
@@ -25,8 +25,7 @@ describe("normalizeMerchantName", () => {
   });
 
   it("collapses consecutive whitespace from stripped punctuation", () => {
-    expect(normalizeMerchantName("A - - B")).toBe("a   b");
-    // (consecutive spaces are not aggressively collapsed; intentional)
+    expect(normalizeMerchantName("A - - B")).toBe("a b");
   });
 
   it("preserves alphanumeric across spaces", () => {

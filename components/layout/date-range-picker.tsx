@@ -42,8 +42,14 @@ export function DateRangePicker() {
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
 
-  const currentFrom = fromParam ? new Date(fromParam) : startOfMonth(new Date());
-  const currentTo = toParam ? new Date(toParam) : endOfMonth(new Date());
+  const currentFrom = useMemo(
+    () => (fromParam ? new Date(fromParam) : startOfMonth(new Date())),
+    [fromParam],
+  );
+  const currentTo = useMemo(
+    () => (toParam ? new Date(toParam) : endOfMonth(new Date())),
+    [toParam],
+  );
 
   const [range, setRange] = useState<DateRange | undefined>({
     from: currentFrom,

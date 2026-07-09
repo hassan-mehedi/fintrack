@@ -18,7 +18,6 @@ import { sql } from "drizzle-orm";
 // without truncation. Existing columns are widened in the Phase-1 migration.
 const MONEY = { precision: 19, scale: 4 } as const;
 const FX_RATE = { precision: 18, scale: 8 } as const;
-const QTY = { precision: 24, scale: 8 } as const;
 
 // Enums
 export const accountTypeEnum = pgEnum("account_type", [

@@ -75,7 +75,6 @@ export async function getObjectBytes(key: string): Promise<Uint8Array> {
   const { client, bucket } = getClient();
   const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   if (!res.Body) throw new Error(`empty object body for ${key}`);
-  // @ts-expect-error — Body in Node is a Readable
   return res.Body.transformToByteArray();
 }
 

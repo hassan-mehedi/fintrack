@@ -1,15 +1,21 @@
-import { handleChatStream } from "@mastra/ai-sdk";
-import { RequestContext } from "@mastra/core/request-context";
-import { createUIMessageStreamResponse } from "ai";
-import { mastra } from "@/lib/mastra";
+import { openai } from "@ai-sdk/openai";
+import {
+  convertToModelMessages,
+  stepCountIs,
+  streamText,
+  type UIMessage,
+} from "ai";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { chatLimiter, isBodyTooLarge } from "@/lib/rate-limit";
 import { validateMessage } from "@/lib/chat-guardrails";
-import { getCurrencyInfo } from "@/lib/currencies";
 import { logger } from "@/lib/logger";
+import {
+  buildFinancialAssistantInstructions,
+  createFinancialAssistantTools,
+} from "@/lib/ai/financial-assistant";
 
 export async function POST(req: Request) {
   const start = Date.now();
@@ -43,9 +49,10 @@ export async function POST(req: Request) {
   }
 
   const params = await req.json();
+  const rawMessages = Array.isArray(params.messages) ? params.messages : [];
 
   // Validate the latest user message
-  const lastUserMessage = [...(params.messages ?? [])]
+  const lastUserMessage = [...rawMessages]
     .reverse()
     .find((m: { role: string }) => m.role === "user");
   if (lastUserMessage) {
@@ -74,30 +81,24 @@ export async function POST(req: Request) {
   }
 
   const userCurrency = user.currency ?? "BDT";
-  const currencyInfo = getCurrencyInfo(userCurrency);
+  const messages = await convertToModelMessages(rawMessages as UIMessage[]);
 
-  const requestContext = new RequestContext();
-  requestContext.set("userId", session.user.id);
-  requestContext.set("userCurrency", userCurrency);
-
-  // Prepend a system message with the user's currency context
-  const currencySystemMessage = {
-    role: "system",
-    content: `The user's currency is ${currencyInfo.code} (${currencyInfo.symbol}). Always format monetary amounts using ${currencyInfo.code}. For example, use "${currencyInfo.symbol}1,234.56" format.`,
-  };
-  const messages = [currencySystemMessage, ...(params.messages ?? [])];
-
-  const stream = await handleChatStream({
-    mastra,
-    agentId: "financialAgent",
-    params: {
-      ...params,
-      messages,
-      requestContext,
+  const result = streamText({
+    model: openai("gpt-4o-mini"),
+    system: buildFinancialAssistantInstructions(userCurrency),
+    messages,
+    tools: createFinancialAssistantTools({
+      userId: session.user.id,
+      userCurrency,
+    }),
+    stopWhen: stepCountIs(8),
+    onError(error) {
+      logger.error({ err: error }, "chat stream failed");
     },
   });
 
   logger.info({ method: "POST", path: "/api/chat", status: 200, duration: Date.now() - start }, "request completed");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createUIMessageStreamResponse({ stream: stream as any });
+  return result.toUIMessageStreamResponse({
+    onError: () => "The assistant could not complete this request.",
+  });
 }

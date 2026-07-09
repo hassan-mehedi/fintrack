@@ -3,10 +3,8 @@ import {
   loginSchema,
   registerSchema,
   financialAccountSchema,
-  categorySchema,
   transactionSchema,
   budgetSchema,
-  recurringTransactionSchema,
 } from "@/lib/validators";
 
 describe("loginSchema", () => {

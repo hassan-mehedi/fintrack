@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 
 export function FooterSection() {
@@ -9,7 +10,13 @@ export function FooterSection() {
           {/* Branding */}
           <div className="sm:col-span-2">
             <Link href="/" className="flex items-center gap-2 mb-4">
-              <img src="/logo.png" alt="Fintrack" className="h-9 sm:h-10 object-contain" />
+              <Image
+                src="/logo.png"
+                alt="Fintrack"
+                width={180}
+                height={45}
+                className="h-9 w-auto object-contain sm:h-10"
+              />
             </Link>
             <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">
               Take control of your finances with smart tracking, budgeting, and

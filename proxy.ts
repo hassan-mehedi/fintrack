@@ -1,5 +1,5 @@
-import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
+import { NextRequest, NextResponse } from "next/server";
 
 const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-password"];
 const publicApiPrefixes = ["/api/auth", "/api/register", "/api/password-reset"];
@@ -34,9 +34,13 @@ function applySecurityHeaders(response: NextResponse, csp: string) {
   return response;
 }
 
-export default auth((req) => {
+export async function proxy(req: NextRequest) {
   const { nextUrl } = req;
-  const isLoggedIn = !!req.auth;
+  const token = await getToken({
+    req,
+    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  });
+  const isLoggedIn = !!token;
   const isApiRoute = nextUrl.pathname.startsWith("/api");
   const isPublicApi = publicApiPrefixes.some((prefix) =>
     nextUrl.pathname.startsWith(prefix),
@@ -93,7 +97,9 @@ export default auth((req) => {
     }),
     csp,
   );
-});
+}
+
+export default proxy;
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.png$|.*\\.jpg$|.*\\.jpeg$|.*\\.svg$|.*\\.webp$|.*\\.ico$).*)"],

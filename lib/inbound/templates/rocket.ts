@@ -1,4 +1,4 @@
-import type { InboundTemplate, ParsedTransaction, RawInbound } from "../types";
+import type { InboundTemplate, ParsedTransaction } from "../types";
 import { parseBdtAmount, parseBdtDate, todayIso } from "../types";
 
 /**

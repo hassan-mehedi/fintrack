@@ -45,6 +45,9 @@ const TrendChart = dynamic(
   }
 );
 
+type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
+type SpendingCategory = DashboardData["spendingByCategory"][number];
+
 export default function AnalyticsPage() {
   return (
     <Suspense fallback={<AnalyticsSkeleton />}>
@@ -86,7 +89,7 @@ function AnalyticsContent() {
     fromParam || format(startOfMonth(new Date()), "yyyy-MM-dd");
   const dateTo = toParam || format(endOfMonth(new Date()), "yyyy-MM-dd");
 
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
 
   // All hooks must be called before any early return
   const savingsRate = useMemo(
@@ -110,7 +113,10 @@ function AnalyticsContent() {
   }, [dateFrom, dateTo]);
 
   useEffect(() => {
-    loadData();
+    const id = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [loadData]);
 
   if (!data) {
@@ -186,7 +192,7 @@ function AnalyticsContent() {
           <CardContent>
             <div className="space-y-4">
               {data.spendingByCategory.map(
-                (cat: any, index: number) => {
+                (cat: SpendingCategory, index: number) => {
                   const percentage =
                     data.monthlyExpense > 0
                       ? (cat.total / data.monthlyExpense) * 100

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -69,7 +70,13 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border px-4 py-3">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <img src="/logo.png" alt="Fintrack" className="h-9 object-contain" />
+          <Image
+            src="/logo.png"
+            alt="Fintrack"
+            width={162}
+            height={36}
+            className="h-9 w-auto object-contain"
+          />
         </Link>
       </SidebarHeader>
 

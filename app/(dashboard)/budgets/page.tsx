@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState, useCallback } from "react";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { getBudgets, createBudget, deleteBudget } from "@/lib/actions/budgets";
 import { getCategories } from "@/lib/actions/categories";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,8 @@ import {
 import { format } from "date-fns";
 import { useFormatCurrency } from "@/components/providers/currency-provider";
 
+type BudgetRow = Awaited<ReturnType<typeof getBudgets>>[number];
+
 export default function BudgetsPage() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center py-20 text-muted-foreground">Loading...</div>}>
@@ -59,8 +61,6 @@ export default function BudgetsPage() {
 
 function BudgetsContent() {
   const formatCurrency = useFormatCurrency();
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const now = new Date();
@@ -74,7 +74,7 @@ function BudgetsContent() {
 
   const [month, setMonth] = useState(initialMonth);
   const [year, setYear] = useState(initialYear);
-  const [budgets, setBudgets] = useState<any[]>([]);
+  const [budgets, setBudgets] = useState<BudgetRow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -96,7 +96,10 @@ function BudgetsContent() {
   }, [month, year]);
 
   useEffect(() => {
-    loadData();
+    const id = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [loadData]);
 
   const form = useForm<BudgetInput>({

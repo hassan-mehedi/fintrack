@@ -100,9 +100,9 @@ app/
   (dashboard)/        # Protected app pages
   api/                # API routes (chat, transcribe, translate, auth)
 lib/
+  ai/                 # AI assistant prompt and tools
   actions/            # Server actions (all data mutations)
   db/                 # Schema, migrations, DB client
-  mastra/             # AI agent and tools
   __tests__/          # Unit tests (Vitest)
   auth.ts             # NextAuth configuration
   audit.ts            # Audit log helper (login, logout, register events)
@@ -117,7 +117,7 @@ components/
 
 ## AI Assistant
 
-The assistant is available on the Pro plan and uses a Mastra agent backed by gpt-4o-mini. It has access to 8 tools:
+The assistant is available on the Pro plan and uses the Vercel AI SDK with gpt-4o-mini. It has access to 8 tools:
 
 **Read:** financial summary, transactions list, budget status, accounts list, categories list
 

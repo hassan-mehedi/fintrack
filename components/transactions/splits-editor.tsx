@@ -83,8 +83,8 @@ export function SplitsEditor({
         {value.map((row, i) => (
           <div key={i} className="grid grid-cols-[1fr,7rem,auto] gap-2">
             <Select
-              value={row.categoryId}
-              onValueChange={(v) => update(i, { categoryId: v })}
+              value={row.categoryId || undefined}
+              onValueChange={(v) => update(i, { categoryId: String(v) })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Category" />

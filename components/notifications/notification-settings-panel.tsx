@@ -144,6 +144,7 @@ export function NotificationSettingsPanel() {
               disabled={busy}
             />
             <ToggleWithNumber
+              key={`budget-warning-${prefs.budgetWarningPercent}`}
               label="Budget warning"
               description="Push when a category crosses a percentage of its monthly budget."
               checked={prefs.notifyBudgetWarning}
@@ -154,6 +155,7 @@ export function NotificationSettingsPanel() {
               disabled={busy}
             />
             <ToggleWithNumber
+              key={`large-transaction-${prefs.largeTransactionThreshold ?? ""}`}
               label="Large transaction"
               description="Push for any single expense at or above this amount."
               checked={prefs.notifyLargeTransaction}
@@ -169,6 +171,7 @@ export function NotificationSettingsPanel() {
               disabled={busy}
             />
             <ToggleWithNumber
+              key={`bill-due-${prefs.billReminderDaysBefore}`}
               label="Bill due reminders"
               description="Days before a recurring expense's next due date to alert."
               checked={prefs.notifyBillDueSoon}
@@ -179,6 +182,7 @@ export function NotificationSettingsPanel() {
               disabled={busy}
             />
             <ToggleWithNumber
+              key={`low-balance-${prefs.lowBalanceThreshold ?? ""}`}
               label="Low balance"
               description="Alert when any asset account drops below this amount."
               checked={prefs.notifyLowBalance}
@@ -242,7 +246,6 @@ function ToggleWithNumber({
   disabled?: boolean;
 }) {
   const [local, setLocal] = useState(String(numberValue));
-  useEffect(() => setLocal(String(numberValue)), [numberValue]);
   const commit = () => {
     const n = Number(local);
     if (!Number.isFinite(n)) return;
