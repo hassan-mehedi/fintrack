@@ -10,6 +10,7 @@ import { revokeToken, isTokenRevoked } from "@/lib/token-revocation";
 import { createAuditLog } from "@/lib/audit";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true,
   session: {
     strategy: "jwt",
     maxAge: 24 * 60 * 60,
