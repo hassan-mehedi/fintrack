@@ -6,12 +6,32 @@ import {
   financialAccounts,
   categories,
 } from "@/lib/db/schema";
-import { auth } from "@/lib/auth";
-import { eq, and, desc, gte, lte, sql, ilike, or } from "drizzle-orm";
+import { getSession } from "@/lib/auth";
+import { eq, and, desc, gte, lte, sql, ilike, inArray } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import { transactionSchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
-import { neon } from "@neondatabase/serverless";
 import { getBalanceDelta, getTransferDeltas } from "@/lib/accounts";
+
+type Batch = [BatchItem<"pg">, ...BatchItem<"pg">[]];
+
+async function getAccountTypes(ids: string[]): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ id: financialAccounts.id, type: financialAccounts.type })
+    .from(financialAccounts)
+    .where(inArray(financialAccounts.id, ids));
+  return new Map(rows.map((r) => [r.id, r.type]));
+}
+
+function balanceUpdate(accountId: string, delta: number) {
+  return db
+    .update(financialAccounts)
+    .set({
+      balance: sql`${financialAccounts.balance}::numeric + ${delta}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(financialAccounts.id, accountId));
+}
 
 export async function getTransactions(filters?: {
   type?: string;
@@ -23,7 +43,7 @@ export async function getTransactions(filters?: {
   page?: number;
   limit?: number;
 }) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const page = filters?.page || 1;
@@ -100,90 +120,57 @@ export async function getTransactions(filters?: {
   };
 }
 
-async function getAccountType(accountId: string): Promise<string> {
-  const [account] = await db
-    .select({ type: financialAccounts.type })
-    .from(financialAccounts)
-    .where(eq(financialAccounts.id, accountId))
-    .limit(1);
-  return account.type;
-}
-
 export async function createTransaction(data: unknown) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const parsed = transactionSchema.parse(data);
   const amount = Number(parsed.amount);
   const fee = Number(parsed.fee || 0);
 
-  const sqlClient = neon(process.env.DATABASE_URL!);
-  await sqlClient`BEGIN`;
+  const insertTxn = db
+    .insert(transactions)
+    .values({
+      userId: session.user.id,
+      accountId: parsed.accountId,
+      toAccountId: parsed.toAccountId || null,
+      categoryId: parsed.categoryId,
+      amount: parsed.amount,
+      fee: parsed.fee || "0",
+      type: parsed.type,
+      description: parsed.description || "",
+      date: parsed.date,
+      tags: parsed.tags || [],
+    })
+    .returning();
 
-  try {
-    const [txn] = await db
-      .insert(transactions)
-      .values({
-        userId: session.user.id,
-        accountId: parsed.accountId,
-        toAccountId: parsed.toAccountId || null,
-        categoryId: parsed.categoryId,
-        amount: parsed.amount,
-        fee: parsed.fee || "0",
-        type: parsed.type,
-        description: parsed.description || "",
-        date: parsed.date,
-        tags: parsed.tags || [],
-      })
-      .returning();
+  const writes: Batch = [insertTxn];
 
-    const sourceType = await getAccountType(parsed.accountId);
-
-    if (parsed.type === "income" || parsed.type === "expense") {
-      const delta = getBalanceDelta(sourceType, parsed.type, amount, fee);
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${delta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.accountId));
-    } else if (parsed.type === "transfer" && parsed.toAccountId) {
-      const destType = await getAccountType(parsed.toAccountId);
-      const { sourceDelta, destDelta } = getTransferDeltas(
-        sourceType, destType, amount, fee
-      );
-
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${sourceDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.accountId));
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${destDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.toAccountId));
-    }
-
-    await sqlClient`COMMIT`;
-
-    revalidatePath("/");
-    revalidatePath("/transactions");
-    revalidatePath("/accounts");
-    return txn;
-  } catch (error) {
-    await sqlClient`ROLLBACK`;
-    throw error;
+  if (parsed.type === "income" || parsed.type === "expense") {
+    const types = await getAccountTypes([parsed.accountId]);
+    const delta = getBalanceDelta(
+      types.get(parsed.accountId)!, parsed.type, amount, fee
+    );
+    writes.push(balanceUpdate(parsed.accountId, delta));
+  } else if (parsed.type === "transfer" && parsed.toAccountId) {
+    const types = await getAccountTypes([parsed.accountId, parsed.toAccountId]);
+    const { sourceDelta, destDelta } = getTransferDeltas(
+      types.get(parsed.accountId)!, types.get(parsed.toAccountId)!, amount, fee
+    );
+    writes.push(balanceUpdate(parsed.accountId, sourceDelta));
+    writes.push(balanceUpdate(parsed.toAccountId, destDelta));
   }
+
+  const [inserted] = await db.batch(writes);
+
+  revalidatePath("/");
+  revalidatePath("/transactions");
+  revalidatePath("/accounts");
+  return inserted[0];
 }
 
 export async function updateTransaction(id: string, data: unknown) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const parsed = transactionSchema.parse(data);
@@ -203,110 +190,70 @@ export async function updateTransaction(id: string, data: unknown) {
   const oldAmount = Number(oldTxn.amount);
   const oldFee = Number(oldTxn.fee);
 
-  const sqlClient = neon(process.env.DATABASE_URL!);
-  await sqlClient`BEGIN`;
+  const ids = [oldTxn.accountId, parsed.accountId];
+  if (oldTxn.toAccountId) ids.push(oldTxn.toAccountId);
+  if (parsed.toAccountId) ids.push(parsed.toAccountId);
+  const types = await getAccountTypes(ids);
 
-  try {
-    // 1. Reverse old balance effects
-    const oldSourceType = await getAccountType(oldTxn.accountId);
+  const updateTxn = db
+    .update(transactions)
+    .set({
+      accountId: parsed.accountId,
+      toAccountId: parsed.toAccountId || null,
+      categoryId: parsed.categoryId,
+      amount: parsed.amount,
+      fee: parsed.fee || "0",
+      type: parsed.type,
+      description: parsed.description || "",
+      date: parsed.date,
+      tags: parsed.tags || [],
+      updatedAt: new Date(),
+    })
+    .where(
+      and(eq(transactions.id, id), eq(transactions.userId, session.user.id))
+    )
+    .returning();
 
-    if (oldTxn.type === "income" || oldTxn.type === "expense") {
-      const oldDelta = getBalanceDelta(oldSourceType, oldTxn.type, oldAmount, oldFee);
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric - ${oldDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, oldTxn.accountId));
-    } else if (oldTxn.type === "transfer" && oldTxn.toAccountId) {
-      const oldDestType = await getAccountType(oldTxn.toAccountId);
-      const { sourceDelta, destDelta } = getTransferDeltas(
-        oldSourceType, oldDestType, oldAmount, oldFee
-      );
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric - ${sourceDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, oldTxn.accountId));
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric - ${destDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, oldTxn.toAccountId));
-    }
+  const writes: Batch = [updateTxn];
 
-    // 2. Update the transaction record
-    const [updated] = await db
-      .update(transactions)
-      .set({
-        accountId: parsed.accountId,
-        toAccountId: parsed.toAccountId || null,
-        categoryId: parsed.categoryId,
-        amount: parsed.amount,
-        fee: parsed.fee || "0",
-        type: parsed.type,
-        description: parsed.description || "",
-        date: parsed.date,
-        tags: parsed.tags || [],
-        updatedAt: new Date(),
-      })
-      .where(
-        and(eq(transactions.id, id), eq(transactions.userId, session.user.id))
-      )
-      .returning();
-
-    // 3. Apply new balance effects
-    const newSourceType = await getAccountType(parsed.accountId);
-
-    if (parsed.type === "income" || parsed.type === "expense") {
-      const newDelta = getBalanceDelta(newSourceType, parsed.type, newAmount, newFee);
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${newDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.accountId));
-    } else if (parsed.type === "transfer" && parsed.toAccountId) {
-      const newDestType = await getAccountType(parsed.toAccountId);
-      const { sourceDelta, destDelta } = getTransferDeltas(
-        newSourceType, newDestType, newAmount, newFee
-      );
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${sourceDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.accountId));
-      await db
-        .update(financialAccounts)
-        .set({
-          balance: sql`${financialAccounts.balance}::numeric + ${destDelta}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(financialAccounts.id, parsed.toAccountId));
-    }
-
-    await sqlClient`COMMIT`;
-
-    revalidatePath("/");
-    revalidatePath("/transactions");
-    revalidatePath("/accounts");
-    return updated;
-  } catch (error) {
-    await sqlClient`ROLLBACK`;
-    throw error;
+  // Reverse old balance effects
+  if (oldTxn.type === "income" || oldTxn.type === "expense") {
+    const oldDelta = getBalanceDelta(
+      types.get(oldTxn.accountId)!, oldTxn.type, oldAmount, oldFee
+    );
+    writes.push(balanceUpdate(oldTxn.accountId, -oldDelta));
+  } else if (oldTxn.type === "transfer" && oldTxn.toAccountId) {
+    const { sourceDelta, destDelta } = getTransferDeltas(
+      types.get(oldTxn.accountId)!, types.get(oldTxn.toAccountId)!, oldAmount, oldFee
+    );
+    writes.push(balanceUpdate(oldTxn.accountId, -sourceDelta));
+    writes.push(balanceUpdate(oldTxn.toAccountId, -destDelta));
   }
+
+  // Apply new balance effects
+  if (parsed.type === "income" || parsed.type === "expense") {
+    const newDelta = getBalanceDelta(
+      types.get(parsed.accountId)!, parsed.type, newAmount, newFee
+    );
+    writes.push(balanceUpdate(parsed.accountId, newDelta));
+  } else if (parsed.type === "transfer" && parsed.toAccountId) {
+    const { sourceDelta, destDelta } = getTransferDeltas(
+      types.get(parsed.accountId)!, types.get(parsed.toAccountId)!, newAmount, newFee
+    );
+    writes.push(balanceUpdate(parsed.accountId, sourceDelta));
+    writes.push(balanceUpdate(parsed.toAccountId, destDelta));
+  }
+
+  const [updated] = await db.batch(writes);
+
+  revalidatePath("/");
+  revalidatePath("/transactions");
+  revalidatePath("/accounts");
+  return updated[0];
 }
 
 export async function deleteTransaction(id: string) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const [txn] = await db
@@ -321,44 +268,30 @@ export async function deleteTransaction(id: string) {
 
   const amount = Number(txn.amount);
   const fee = Number(txn.fee);
-  const sourceType = await getAccountType(txn.accountId);
 
-  // Reverse the balance changes
-  if (txn.type === "income" || txn.type === "expense") {
-    const delta = getBalanceDelta(sourceType, txn.type, amount, fee);
-    await db
-      .update(financialAccounts)
-      .set({
-        balance: sql`${financialAccounts.balance}::numeric - ${delta}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(financialAccounts.id, txn.accountId));
-  } else if (txn.type === "transfer" && txn.toAccountId) {
-    const destType = await getAccountType(txn.toAccountId);
-    const { sourceDelta, destDelta } = getTransferDeltas(
-      sourceType, destType, amount, fee
-    );
-    await db
-      .update(financialAccounts)
-      .set({
-        balance: sql`${financialAccounts.balance}::numeric - ${sourceDelta}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(financialAccounts.id, txn.accountId));
-    await db
-      .update(financialAccounts)
-      .set({
-        balance: sql`${financialAccounts.balance}::numeric - ${destDelta}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(financialAccounts.id, txn.toAccountId));
-  }
-
-  await db
+  const deleteTxn = db
     .delete(transactions)
     .where(
       and(eq(transactions.id, id), eq(transactions.userId, session.user.id))
     );
+
+  const writes: Batch = [deleteTxn];
+
+  // Reverse the balance changes
+  if (txn.type === "income" || txn.type === "expense") {
+    const types = await getAccountTypes([txn.accountId]);
+    const delta = getBalanceDelta(types.get(txn.accountId)!, txn.type, amount, fee);
+    writes.push(balanceUpdate(txn.accountId, -delta));
+  } else if (txn.type === "transfer" && txn.toAccountId) {
+    const types = await getAccountTypes([txn.accountId, txn.toAccountId]);
+    const { sourceDelta, destDelta } = getTransferDeltas(
+      types.get(txn.accountId)!, types.get(txn.toAccountId)!, amount, fee
+    );
+    writes.push(balanceUpdate(txn.accountId, -sourceDelta));
+    writes.push(balanceUpdate(txn.toAccountId, -destDelta));
+  }
+
+  await db.batch(writes);
 
   revalidatePath("/");
   revalidatePath("/transactions");

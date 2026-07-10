@@ -1,7 +1,7 @@
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Header } from "@/components/layout/header";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { CurrencyProvider } from "@/components/providers/currency-provider";
 import { type CurrencyCode, DEFAULT_CURRENCY } from "@/lib/currencies";
 
@@ -10,7 +10,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
+  const session = await getSession();
   const currency = (session?.user?.currency as CurrencyCode) ?? DEFAULT_CURRENCY;
 
   return (

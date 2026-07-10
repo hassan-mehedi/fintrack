@@ -2,13 +2,13 @@
 
 import { db } from "@/lib/db";
 import { financialAccounts } from "@/lib/db/schema";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { eq, and } from "drizzle-orm";
 import { financialAccountSchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
 
 export async function getAccounts() {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   return db
@@ -18,7 +18,7 @@ export async function getAccounts() {
 }
 
 export async function createAccount(data: unknown) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const parsed = financialAccountSchema.parse(data);
@@ -44,7 +44,7 @@ export async function createAccount(data: unknown) {
 }
 
 export async function updateAccount(id: string, data: unknown) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const parsed = financialAccountSchema.parse(data);
@@ -76,7 +76,7 @@ export async function updateAccount(id: string, data: unknown) {
 }
 
 export async function deleteAccount(id: string) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   await db

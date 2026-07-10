@@ -2,12 +2,18 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { randomUUID } from "crypto";
+import { cache } from "react";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { loginLimiter } from "@/lib/rate-limit";
 import { revokeToken, isTokenRevoked } from "@/lib/token-revocation";
 import { createAuditLog } from "@/lib/audit";
+
+// How long a token trusts its cached plan/currency before re-reading the DB.
+// Revocation (per-token) is still checked on every request; only the bulk
+// sessionVersion check and plan/currency refresh are throttled to this window.
+const TOKEN_REFRESH_MS = 60 * 1000;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
@@ -81,28 +87,43 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           image: user.image,
           plan: user.plan,
+          currency: user.currency,
           sessionVersion: user.sessionVersion,
         };
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
-      // Inject jti once on initial sign-in
+    async jwt({ token, user, trigger }) {
+      // Seed the token from the DB row on initial sign-in — no extra query needed
       if (user) {
-        token.id = user.id;
+        const u = user as {
+          id: string;
+          plan?: "free" | "pro";
+          currency?: string;
+          sessionVersion?: number;
+        };
+        token.id = u.id;
         token.jti = randomUUID();
-        token.sessionVersion = (user as { sessionVersion?: number }).sessionVersion ?? 0;
+        token.sessionVersion = u.sessionVersion ?? 0;
+        token.plan = u.plan ?? "free";
+        token.currency = u.currency ?? "BDT";
+        token.refreshAt = Date.now() + TOKEN_REFRESH_MS;
       }
 
-      // Reject revoked tokens
+      // Reject revoked tokens — checked on every request
       if (token.jti) {
         const revoked = await isTokenRevoked(token.jti as string);
         if (revoked) return null;
       }
 
-      // Always fetch the latest plan/currency from DB
-      if (token.id) {
+      // Refresh plan/currency and re-check sessionVersion only past the window
+      // (or when the client explicitly asks via update())
+      const refreshAt = token.refreshAt as number | undefined;
+      const needsRefresh =
+        trigger === "update" || !refreshAt || Date.now() > refreshAt;
+
+      if (token.id && needsRefresh) {
         const [dbUser] = await db
           .select({
             plan: users.plan,
@@ -118,8 +139,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if ((token.sessionVersion as number | undefined) !== dbUser.sessionVersion) {
           return null;
         }
-        token.plan = dbUser?.plan ?? "free";
-        token.currency = dbUser?.currency ?? "BDT";
+        token.plan = dbUser.plan ?? "free";
+        token.currency = dbUser.currency ?? "BDT";
+        token.refreshAt = Date.now() + TOKEN_REFRESH_MS;
       }
       return token;
     },
@@ -144,3 +166,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
+
+// Request-scoped session read: multiple calls within one server render/action
+// (layout + page + data fetchers) share a single auth() resolution.
+export const getSession = cache(() => auth());

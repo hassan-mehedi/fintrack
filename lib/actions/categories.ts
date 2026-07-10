@@ -2,29 +2,30 @@
 
 import { db } from "@/lib/db";
 import { categories } from "@/lib/db/schema";
-import { auth } from "@/lib/auth";
-import { eq, and } from "drizzle-orm";
+import { getSession } from "@/lib/auth";
+import { eq, and, or } from "drizzle-orm";
 import { categorySchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
 
 export async function getCategories(type?: "income" | "expense" | "both") {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
-  const allCategories = await db
+  return db
     .select()
     .from(categories)
-    .where(eq(categories.userId, session.user.id));
-
-  if (!type) return allCategories;
-
-  return allCategories.filter(
-    (cat) => cat.type === type || cat.type === "both"
-  );
+    .where(
+      and(
+        eq(categories.userId, session.user.id),
+        type
+          ? or(eq(categories.type, type), eq(categories.type, "both"))
+          : undefined
+      )
+    );
 }
 
 export async function createCategory(data: unknown) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const parsed = categorySchema.parse(data);
@@ -46,7 +47,7 @@ export async function createCategory(data: unknown) {
 }
 
 export async function updateCategory(id: string, data: unknown) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const parsed = categorySchema.parse(data);
@@ -69,7 +70,7 @@ export async function updateCategory(id: string, data: unknown) {
 }
 
 export async function deleteCategory(id: string) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   await db

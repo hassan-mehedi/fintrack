@@ -7,11 +7,11 @@ import {
   financialAccounts,
   categories,
 } from "@/lib/db/schema";
-import { auth } from "@/lib/auth";
-import { eq, and, desc, lte, sql } from "drizzle-orm";
+import { getSession } from "@/lib/auth";
+import { eq, and, desc, lte, sql, inArray } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import { recurringTransactionSchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
-import { neon } from "@neondatabase/serverless";
 import {
   addDays,
   addWeeks,
@@ -25,7 +25,7 @@ import {
 import { getBalanceDelta } from "@/lib/accounts";
 
 export async function getRecurringTransactions() {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const data = await db
@@ -65,7 +65,7 @@ export async function getRecurringTransactions() {
 }
 
 export async function createRecurringTransaction(data: unknown) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const parsed = recurringTransactionSchema.parse(data);
@@ -91,7 +91,7 @@ export async function createRecurringTransaction(data: unknown) {
 }
 
 export async function updateRecurringTransaction(id: string, data: unknown) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const parsed = recurringTransactionSchema.parse(data);
@@ -120,7 +120,7 @@ export async function updateRecurringTransaction(id: string, data: unknown) {
 }
 
 export async function deleteRecurringTransaction(id: string) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   await db
@@ -136,7 +136,7 @@ export async function deleteRecurringTransaction(id: string) {
 }
 
 export async function toggleRecurringTransaction(id: string, isActive: boolean) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   await db
@@ -169,7 +169,7 @@ function getNextDate(
 }
 
 export async function processRecurringTransactions() {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   const today = new Date();
@@ -187,80 +187,97 @@ export async function processRecurringTransactions() {
       )
     );
 
-  const sqlClient = neon(process.env.DATABASE_URL!);
-  let created = 0;
+  if (active.length === 0) return { created: 0 };
+
+  // Fetch every involved account's type once instead of per generated date
+  const accountIds = [...new Set(active.map((r) => r.accountId))];
+  const typeRows = await db
+    .select({ id: financialAccounts.id, type: financialAccounts.type })
+    .from(financialAccounts)
+    .where(inArray(financialAccounts.id, accountIds));
+  const accountTypes = new Map(typeRows.map((r) => [r.id, r.type]));
+
+  const newRows: (typeof transactions.$inferInsert)[] = [];
+  const balanceDeltas = new Map<string, number>();
+  const lastProcessedByRule = new Map<string, string>();
 
   for (const rule of active) {
-    // Skip if past end date
     if (rule.endDate && todayStr > rule.endDate) continue;
 
-    // Determine which dates need transactions
     const startFrom = rule.lastProcessed
       ? getNextDate(parseISO(rule.lastProcessed), rule.frequency)
       : parseISO(rule.startDate);
 
+    const amount = Number(rule.amount);
+    const fee = Number(rule.fee);
+    const accountType = accountTypes.get(rule.accountId);
     let current = startFrom;
 
     while (isBefore(current, today) || isEqual(current, today)) {
       const dateStr = format(current, "yyyy-MM-dd");
       if (rule.endDate && dateStr > rule.endDate) break;
 
-      const amount = Number(rule.amount);
-      const fee = Number(rule.fee);
+      newRows.push({
+        userId: session.user.id,
+        accountId: rule.accountId,
+        categoryId: rule.categoryId,
+        amount: rule.amount,
+        fee: rule.fee,
+        type: rule.type,
+        description: rule.description,
+        date: dateStr,
+        tags: [],
+        recurringId: rule.id,
+      });
 
-      await sqlClient`BEGIN`;
-      try {
-        // Insert transaction
-        await db.insert(transactions).values({
-          userId: session.user.id,
-          accountId: rule.accountId,
-          categoryId: rule.categoryId,
-          amount: rule.amount,
-          fee: rule.fee,
-          type: rule.type,
-          description: rule.description,
-          date: dateStr,
-          tags: [],
-          recurringId: rule.id,
-        });
-
-        // Update account balance (liability-aware)
-        const [account] = await db
-          .select({ type: financialAccounts.type })
-          .from(financialAccounts)
-          .where(eq(financialAccounts.id, rule.accountId))
-          .limit(1);
-
-        const delta = getBalanceDelta(account.type, rule.type as "income" | "expense", amount, fee);
-        await db
-          .update(financialAccounts)
-          .set({
-            balance: sql`${financialAccounts.balance}::numeric + ${delta}`,
-            updatedAt: new Date(),
-          })
-          .where(eq(financialAccounts.id, rule.accountId));
-
-        // Update lastProcessed
-        await db
-          .update(recurringTransactions)
-          .set({ lastProcessed: dateStr })
-          .where(eq(recurringTransactions.id, rule.id));
-
-        await sqlClient`COMMIT`;
-        created++;
-      } catch (error) {
-        await sqlClient`ROLLBACK`;
-        throw error;
+      if (accountType) {
+        const delta = getBalanceDelta(
+          accountType, rule.type as "income" | "expense", amount, fee
+        );
+        balanceDeltas.set(
+          rule.accountId, (balanceDeltas.get(rule.accountId) ?? 0) + delta
+        );
       }
+      lastProcessedByRule.set(rule.id, dateStr);
 
       current = getNextDate(current, rule.frequency);
     }
   }
+
+  if (newRows.length === 0) return { created: 0 };
+
+  // One atomic batch: all inserts + net balance change per account + lastProcessed
+  const writes: [BatchItem<"pg">, ...BatchItem<"pg">[]] = [
+    db.insert(transactions).values(newRows),
+  ];
+
+  for (const [accountId, delta] of balanceDeltas) {
+    writes.push(
+      db
+        .update(financialAccounts)
+        .set({
+          balance: sql`${financialAccounts.balance}::numeric + ${delta}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(financialAccounts.id, accountId))
+    );
+  }
+
+  for (const [ruleId, dateStr] of lastProcessedByRule) {
+    writes.push(
+      db
+        .update(recurringTransactions)
+        .set({ lastProcessed: dateStr })
+        .where(eq(recurringTransactions.id, ruleId))
+    );
+  }
+
+  await db.batch(writes);
 
   revalidatePath("/");
   revalidatePath("/transactions");
   revalidatePath("/accounts");
   revalidatePath("/recurring");
 
-  return { created };
+  return { created: newRows.length };
 }
