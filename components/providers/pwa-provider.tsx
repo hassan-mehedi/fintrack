@@ -90,10 +90,7 @@ export function PwaProvider({
     };
 
     const registerServiceWorker = async () => {
-      if (
-        process.env.NODE_ENV === "development" ||
-        !("serviceWorker" in navigator)
-      ) {
+      if (!("serviceWorker" in navigator)) {
         return;
       }
 

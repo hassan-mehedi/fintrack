@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-password"];
+const publicPwaRoutes = ["/manifest.webmanifest", "/sw.js", "/offline", "/pwa-icon"];
 const publicApiPrefixes = ["/api/auth", "/api/register", "/api/password-reset"];
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -42,12 +43,25 @@ export default auth((req) => {
     nextUrl.pathname.startsWith(prefix),
   );
   const isPublicRoute = publicRoutes.includes(nextUrl.pathname);
+  const isPublicPwaRoute = publicPwaRoutes.includes(nextUrl.pathname);
   const nonce = generateNonce();
   const csp = buildContentSecurityPolicy(nonce);
   const requestHeaders = new Headers(req.headers);
 
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
+
+  // Serve PWA assets to everyone; the browser fetches these without cookies
+  if (isPublicPwaRoute) {
+    return applySecurityHeaders(
+      NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      }),
+      csp,
+    );
+  }
 
   // Allow public API routes through without auth
   if (isApiRoute && isPublicApi) {
