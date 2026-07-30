@@ -3,7 +3,13 @@ import { NextResponse } from "next/server";
 
 const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/reset-password"];
 const publicPwaRoutes = ["/manifest.webmanifest", "/sw.js", "/offline", "/pwa-icon"];
-const publicApiPrefixes = ["/api/auth", "/api/register", "/api/password-reset"];
+const publicApiPrefixes = [
+  "/api/auth",
+  "/api/register",
+  "/api/password-reset",
+  "/api/cron",
+  "/api/verify-email",
+];
 const isDev = process.env.NODE_ENV !== "production";
 
 function generateNonce() {

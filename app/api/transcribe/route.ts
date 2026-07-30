@@ -44,6 +44,13 @@ export async function POST(req: Request) {
   }
 
   const language = (formData.get("language") as string) || "en";
+
+  if (!process.env.OPENAI_API_KEY) {
+    return Response.json(
+      { error: "Voice input is unavailable: transcription requires an OpenAI API key." },
+      { status: 503 }
+    );
+  }
   const client = getOpenAIClient();
 
   // Convert Blob to File for OpenAI SDK

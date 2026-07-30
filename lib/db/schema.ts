@@ -220,6 +220,18 @@ export const budgets = pgTable("budgets", {
   index("budgets_category_id_idx").on(table.categoryId),
 ]);
 
+// ── Budget Alerts ──────────────────────────────────────
+export const budgetAlerts = pgTable("budget_alerts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  budgetId: uuid("budget_id")
+    .notNull()
+    .references(() => budgets.id, { onDelete: "cascade" }),
+  threshold: integer("threshold").notNull(),
+  sentAt: timestamp("sent_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("budget_alerts_budget_threshold_idx").on(table.budgetId, table.threshold),
+]);
+
 // ── Recurring Transactions (Phase 2) ───────────────────
 export const recurringTransactions = pgTable("recurring_transactions", {
   id: uuid("id").defaultRandom().primaryKey(),

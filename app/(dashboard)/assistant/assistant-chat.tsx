@@ -174,7 +174,7 @@ function useWhisperRecording(
 
 // --- Main component ---
 
-export function AssistantChat() {
+export function AssistantChat({ voiceEnabled = true }: { voiceEnabled?: boolean }) {
   const [input, setInput] = useState("");
   const [voiceLang, setVoiceLang] = useState<VoiceLang>("en");
 
@@ -220,8 +220,9 @@ export function AssistantChat() {
     [voiceLang]
   );
 
-  const { isRecording, seconds, isTranscribing, isSupported, toggle: toggleMic } =
+  const { isRecording, seconds, isTranscribing, isSupported: isMicSupported, toggle: toggleMic } =
     useWhisperRecording(handleTranscriptionResult, voiceLang);
+  const isSupported = voiceEnabled && isMicSupported;
 
   const isLoading = status === "streaming" || status === "submitted";
   const isBusy = isLoading || isTranscribing;

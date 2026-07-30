@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { isVoiceInputAvailable } from "@/lib/ai/provider";
 import { getSubscriptionRequest } from "@/lib/actions/subscription";
 import { redirect } from "next/navigation";
 import { AssistantChat } from "./assistant-chat";
@@ -9,7 +10,7 @@ export default async function AssistantPage() {
   if (!session?.user?.id) redirect("/login");
 
   if (session.user.plan === "pro") {
-    return <AssistantChat />;
+    return <AssistantChat voiceEnabled={isVoiceInputAvailable()} />;
   }
 
   const request = await getSubscriptionRequest();

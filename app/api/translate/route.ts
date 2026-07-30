@@ -1,5 +1,5 @@
-import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
+import { getChatModel } from "@/lib/ai/provider";
 import { auth } from "@/lib/auth";
 import { translateLimiter, LIMITS, isBodyTooLarge } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   }
 
   const { text: translated } = await generateText({
-    model: openai("gpt-4o-mini"),
+    model: getChatModel(),
     system:
       "You are a translator. Translate the following Bangla text to English. Return ONLY the English translation, nothing else. If the text is already in English or is a mix, still return the full message in natural English.",
     prompt: text,

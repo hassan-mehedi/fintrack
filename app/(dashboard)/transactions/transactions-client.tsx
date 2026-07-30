@@ -190,14 +190,16 @@ export function TransactionsClient({
           <h1 className="text-2xl font-bold">Transactions</h1>
           <p className="text-muted-foreground">{total} transactions found</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <DateRangePicker />
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="mr-1 h-4 w-4" /> Export
-          </Button>
-          <Button onClick={() => { setEditingTransaction(null); setFormOpen(true); }}>
-            <Plus className="mr-1 h-4 w-4" /> Add
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1 sm:flex-none" onClick={handleExport}>
+              <Download className="mr-1 h-4 w-4" /> Export
+            </Button>
+            <Button className="flex-1 sm:flex-none" onClick={() => { setEditingTransaction(null); setFormOpen(true); }}>
+              <Plus className="mr-1 h-4 w-4" /> Add
+            </Button>
+          </div>
         </div>
       </div>
 
