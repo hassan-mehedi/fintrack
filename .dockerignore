@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+.git
+.env
+**/.env
+**/.env.*
+.next
+**/.next
+.expo
+**/.expo
+apps/mobile/android
+apps/mobile/ios
+*.md
+.vscode
+.idea
