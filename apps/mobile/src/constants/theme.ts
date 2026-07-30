@@ -7,20 +7,33 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+// Hex conversions of the web app's oklch palette (apps/web/app/globals.css)
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#0a140e',
+    textSecondary: '#5b675e',
+    background: '#f6f9f7',
+    backgroundElement: '#ffffff',
+    backgroundSelected: '#d9eedf',
+    border: '#d9e0db',
+    primary: '#008339',
+    onPrimary: '#ffffff',
+    success: '#00a54f',
+    danger: '#e7000b',
+    warning: '#e1a200',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#eaf1eb',
+    textSecondary: '#819587',
+    background: '#050b07',
+    backgroundElement: '#0c1610',
+    backgroundSelected: '#16231a',
+    border: 'rgba(255, 255, 255, 0.12)',
+    primary: '#00a54f',
+    onPrimary: '#052e16',
+    success: '#00a54f',
+    danger: '#ff6467',
+    warning: '#e1a200',
   },
 } as const;
 
@@ -61,5 +74,6 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+// The JS tab bar occupies its own layout space, so screens need no extra inset
+export const BottomTabInset = 0;
 export const MaxContentWidth = 800;

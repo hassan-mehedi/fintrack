@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.three,
   },
   addButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#008339',
     borderRadius: Spacing.two,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,

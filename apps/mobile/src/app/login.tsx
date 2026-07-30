@@ -83,13 +83,13 @@ export default function LoginScreen() {
           disabled={isSubmitting}
           style={({ pressed }) => [
             styles.button,
-            { backgroundColor: theme.text },
+            { backgroundColor: theme.primary },
             (pressed || isSubmitting) && styles.buttonPressed,
           ]}>
           {isSubmitting ? (
-            <ActivityIndicator color={theme.background} />
+            <ActivityIndicator color={theme.onPrimary} />
           ) : (
-            <ThemedText type="smallBold" style={{ color: theme.background }}>
+            <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
               Sign in
             </ThemedText>
           )}

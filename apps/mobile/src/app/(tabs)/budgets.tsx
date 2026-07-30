@@ -112,7 +112,7 @@ export default function BudgetsScreen() {
                         styles.progressFill,
                         {
                           width: `${ratio * 100}%`,
-                          backgroundColor: overBudget ? '#ef4444' : item.categoryColor || '#3b82f6',
+                          backgroundColor: overBudget ? '#ef4444' : item.categoryColor || '#008339',
                         },
                       ]}
                     />
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.four,
   },
   addButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#008339',
     borderRadius: Spacing.two,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,

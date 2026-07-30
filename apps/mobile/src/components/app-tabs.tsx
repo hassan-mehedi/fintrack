@@ -1,42 +1,44 @@
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useColorScheme } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
 
-import { Colors } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
-// Icons reuse the two template PNGs as placeholders until we have real ones
+type IconName = keyof typeof MaterialIcons.glyphMap;
+
+const TABS: { name: string; title: string; icon: IconName }[] = [
+  { name: 'index', title: 'Dashboard', icon: 'dashboard' },
+  { name: 'transactions', title: 'Transactions', icon: 'receipt-long' },
+  { name: 'budgets', title: 'Budgets', icon: 'pie-chart' },
+  { name: 'accounts', title: 'Accounts', icon: 'account-balance-wallet' },
+  { name: 'settings', title: 'Settings', icon: 'settings' },
+];
+
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const theme = useTheme();
 
   return (
-    <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Dashboard</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon md="dashboard" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="transactions">
-        <NativeTabs.Trigger.Label>Transactions</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon md="receipt_long" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="budgets">
-        <NativeTabs.Trigger.Label>Budgets</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon md="pie_chart" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="accounts">
-        <NativeTabs.Trigger.Label>Accounts</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon md="account_balance_wallet" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="settings">
-        <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon md="settings" />
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: theme.primary,
+        tabBarInactiveTintColor: theme.textSecondary,
+        tabBarStyle: {
+          backgroundColor: theme.backgroundElement,
+          borderTopColor: theme.border,
+        },
+      }}>
+      {TABS.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            tabBarIcon: ({ color, size }) => (
+              <MaterialIcons name={tab.icon} color={color} size={size} />
+            ),
+          }}
+        />
+      ))}
+    </Tabs>
   );
 }

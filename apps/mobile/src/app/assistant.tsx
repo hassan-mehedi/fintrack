@@ -217,13 +217,13 @@ export default function AssistantScreen() {
               disabled={isStreaming || !input.trim()}
               style={({ pressed }) => [
                 styles.sendButton,
-                { backgroundColor: theme.text },
+                { backgroundColor: theme.primary },
                 (pressed || isStreaming || !input.trim()) && styles.pressed,
               ]}>
               {isStreaming ? (
-                <ActivityIndicator color={theme.background} size="small" />
+                <ActivityIndicator color={theme.onPrimary} size="small" />
               ) : (
-                <ThemedText type="smallBold" style={{ color: theme.background }}>
+                <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
                   Send
                 </ThemedText>
               )}

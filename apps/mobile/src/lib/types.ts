@@ -4,12 +4,19 @@ export interface DashboardData {
   totalLiabilities: number;
   monthlyIncome: number;
   monthlyExpense: number;
+  monthlyFees: number;
+  accounts: Account[];
   spendingByCategory: {
     categoryId: string;
     categoryName: string;
     categoryColor: string;
     categoryIcon: string;
     total: number;
+  }[];
+  monthlyTrend: {
+    month: string;
+    income: number;
+    expense: number;
   }[];
   recentTransactions: TransactionRow[];
 }

@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.8",
+    "@expo/vector-icons": "^15.0.2",
     "@fintrack/shared": "*",
     "@react-native-community/datetimepicker": "9.1.0",
     "@tanstack/react-query": "^5.90.5",
@@ -36,6 +37,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "eslint-config-expo": "~57.0.1",
     "typescript": "~6.0.3"
   },
   "scripts": {

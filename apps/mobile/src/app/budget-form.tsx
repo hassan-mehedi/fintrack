@@ -127,13 +127,13 @@ export default function BudgetFormScreen() {
             disabled={isSaving}
             style={({ pressed }) => [
               styles.saveButton,
-              { backgroundColor: theme.text },
+              { backgroundColor: theme.primary },
               (pressed || isSaving) && styles.pressed,
             ]}>
             {saveMutation.isPending ? (
-              <ActivityIndicator color={theme.background} />
+              <ActivityIndicator color={theme.onPrimary} />
             ) : (
-              <ThemedText type="smallBold" style={{ color: theme.background }}>
+              <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
                 {isEditing ? 'Save changes' : 'Add budget'}
               </ThemedText>
             )}
