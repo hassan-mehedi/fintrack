@@ -1,5 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -9,7 +18,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { formatMoney } from '@/lib/format';
-import type { DashboardData } from '@/lib/types';
+import type { DashboardData, NetWorthPoint } from '@/lib/types';
 import { ACCOUNT_CLASSIFICATION } from '@fintrack/shared/types';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -21,13 +30,35 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   custom: 'Custom',
 };
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function pad(value: number) {
+  return String(value).padStart(2, '0');
+}
+
 function monthLabel(month: string) {
   return new Date(`${month}-01T00:00:00`).toLocaleString(undefined, { month: 'short' });
 }
 
-function daysInCurrentMonth() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+function shortDate(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function spendingDelta(total: number, previousTotal: number) {
+  if (previousTotal <= 0) return { label: 'new', color: 'textSecondary' as const };
+  const pct = ((total - previousTotal) / previousTotal) * 100;
+  const arrow = pct >= 0 ? '↑' : '↓';
+  const magnitude = Math.min(Math.abs(pct), 999).toFixed(0);
+  return {
+    label: `${arrow} ${magnitude}%`,
+    color: pct >= 0 ? ('danger' as const) : ('success' as const),
+  };
 }
 
 export default function DashboardScreen() {
@@ -35,9 +66,29 @@ export default function DashboardScreen() {
   const theme = useTheme();
   const currency = user?.currency ?? 'BDT';
 
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const from = `${year}-${pad(month)}-01`;
+  const to = `${year}-${pad(month)}-${pad(daysInMonth)}`;
+
+  function shiftMonth(delta: number) {
+    const shifted = new Date(year, month - 1 + delta);
+    setMonth(shifted.getMonth() + 1);
+    setYear(shifted.getFullYear());
+  }
+
   const { data, isPending, error, refetch, isRefetching } = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: () => apiFetch<DashboardData>('/v1/dashboard'),
+    queryKey: ['dashboard', from],
+    queryFn: () => apiFetch<DashboardData>(`/v1/dashboard?from=${from}&to=${to}`),
+  });
+
+  const { data: history } = useQuery({
+    queryKey: ['net-worth-history'],
+    queryFn: () => apiFetch<NetWorthPoint[]>('/v1/net-worth-history?months=6'),
   });
 
   const card = { borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border };
@@ -45,11 +96,18 @@ export default function DashboardScreen() {
     data && data.monthlyIncome > 0
       ? ((data.monthlyIncome - data.monthlyExpense) / data.monthlyIncome) * 100
       : 0;
-  const dailyAvg = data ? data.monthlyExpense / daysInCurrentMonth() : 0;
+  const daysElapsed = isCurrentMonth ? now.getDate() : daysInMonth;
+  const dailyAvg = data ? data.monthlyExpense / daysElapsed : 0;
+  const forecast = data ? data.monthlyExpense + dailyAvg * (daysInMonth - daysElapsed) : 0;
+  const forecastOverIncome = data ? forecast > data.monthlyIncome : false;
   const maxSpending = data ? Math.max(...data.spendingByCategory.map((s) => s.total), 1) : 1;
   const maxTrend = data
     ? Math.max(...data.monthlyTrend.flatMap((t) => [t.income, t.expense]), 1)
     : 1;
+
+  const historyMin = history?.length ? Math.min(...history.map((p) => p.netWorth)) : 0;
+  const historyMax = history?.length ? Math.max(...history.map((p) => p.netWorth)) : 1;
+  const historyRange = historyMax - historyMin || 1;
 
   return (
     <ThemedView style={styles.container}>
@@ -58,6 +116,22 @@ export default function DashboardScreen() {
           contentContainerStyle={styles.content}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}>
           <ThemedText type="heading">Dashboard</ThemedText>
+
+          <View style={styles.monthNav}>
+            <Pressable onPress={() => shiftMonth(-1)} style={styles.monthArrow} hitSlop={8}>
+              <ThemedText type="subtitle">‹</ThemedText>
+            </Pressable>
+            <ThemedText type="smallBold">
+              {MONTH_NAMES[month - 1]} {year}
+            </ThemedText>
+            <Pressable
+              onPress={() => shiftMonth(1)}
+              style={[styles.monthArrow, isCurrentMonth && styles.monthArrowDisabled]}
+              disabled={isCurrentMonth}
+              hitSlop={8}>
+              <ThemedText type="subtitle">›</ThemedText>
+            </Pressable>
+          </View>
 
           {isPending && <ActivityIndicator style={styles.loader} color={theme.primary} />}
           {error && (
@@ -156,6 +230,25 @@ export default function DashboardScreen() {
                 </ThemedView>
               </View>
 
+              {isCurrentMonth && (
+                <ThemedView type="backgroundElement" style={[styles.card, card]}>
+                  <View style={styles.spendingHeader}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Projected month-end spend
+                    </ThemedText>
+                    <ThemedText
+                      type="smallBold"
+                      themeColor={forecastOverIncome ? 'danger' : 'text'}>
+                      {formatMoney(forecast, currency)}
+                    </ThemedText>
+                  </View>
+                  <ThemedText type="tiny" themeColor="textSecondary">
+                    Based on your daily average with {daysInMonth - daysElapsed} days left
+                    {forecastOverIncome ? ' — exceeds this month’s income' : ''}
+                  </ThemedText>
+                </ThemedView>
+              )}
+
               {data.accounts.length > 0 && (
                 <>
                   <ThemedText type="sectionTitle">Accounts</ThemedText>
@@ -194,30 +287,50 @@ export default function DashboardScreen() {
                 <>
                   <ThemedText type="sectionTitle">Spending by category</ThemedText>
                   <ThemedView type="backgroundElement" style={[styles.card, card]}>
-                    {data.spendingByCategory.map((item) => (
-                      <View key={item.categoryId} style={styles.spendingRow}>
-                        <View style={styles.spendingHeader}>
-                          <ThemedText type="small" numberOfLines={1} style={styles.spendingName}>
-                            {item.categoryIcon} {item.categoryName}
-                          </ThemedText>
-                          <ThemedText type="smallBold">
-                            {formatMoney(item.total, currency)}
-                          </ThemedText>
-                        </View>
-                        <View
-                          style={[styles.barTrack, { backgroundColor: theme.backgroundSelected }]}>
+                    {data.spendingByCategory.map((item) => {
+                      const delta = spendingDelta(item.total, item.previousTotal);
+                      return (
+                        <Pressable
+                          key={item.categoryId}
+                          onPress={() =>
+                            router.push({
+                              pathname: '/(tabs)/transactions',
+                              params: { categoryId: item.categoryId, from, to },
+                            })
+                          }
+                          style={({ pressed }) => [styles.spendingRow, pressed && styles.pressed]}>
+                          <View style={styles.spendingHeader}>
+                            <ThemedText type="small" numberOfLines={1} style={styles.spendingName}>
+                              {item.categoryIcon} {item.categoryName}
+                            </ThemedText>
+                            <ThemedText type="tiny" themeColor={delta.color}>
+                              {delta.label}
+                            </ThemedText>
+                            <ThemedText type="smallBold">
+                              {formatMoney(item.total, currency)}
+                            </ThemedText>
+                          </View>
                           <View
                             style={[
-                              styles.barFill,
-                              {
-                                backgroundColor: item.categoryColor || theme.primary,
-                                width: `${Math.max((item.total / maxSpending) * 100, 2)}%`,
-                              },
-                            ]}
-                          />
-                        </View>
-                      </View>
-                    ))}
+                              styles.barTrack,
+                              { backgroundColor: theme.backgroundSelected },
+                            ]}>
+                            <View
+                              style={[
+                                styles.barFill,
+                                {
+                                  backgroundColor: item.categoryColor || theme.primary,
+                                  width: `${Math.max((item.total / maxSpending) * 100, 2)}%`,
+                                },
+                              ]}
+                            />
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                    <ThemedText type="tiny" themeColor="textSecondary">
+                      Change is vs the previous month. Tap a category to see its transactions.
+                    </ThemedText>
                   </ThemedView>
                 </>
               )}
@@ -269,6 +382,44 @@ export default function DashboardScreen() {
                 </>
               )}
 
+              <ThemedText type="sectionTitle">Net worth history</ThemedText>
+              <ThemedView type="backgroundElement" style={[styles.card, card]}>
+                {history && history.length >= 2 ? (
+                  <>
+                    <View style={styles.trendChart}>
+                      {history.map((point) => (
+                        <View key={point.date} style={styles.historyColumn}>
+                          <View
+                            style={[
+                              styles.historyBar,
+                              {
+                                backgroundColor: theme.primary,
+                                height: `${
+                                  ((point.netWorth - historyMin) / historyRange) * 80 + 20
+                                }%`,
+                              },
+                            ]}
+                          />
+                        </View>
+                      ))}
+                    </View>
+                    <View style={styles.spendingHeader}>
+                      <ThemedText type="tiny" themeColor="textSecondary">
+                        {shortDate(history[0].date)}
+                      </ThemedText>
+                      <ThemedText type="tiny" themeColor="textSecondary">
+                        {shortDate(history[history.length - 1].date)}
+                      </ThemedText>
+                    </View>
+                  </>
+                ) : (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    A snapshot of your net worth is saved each day you open the app — the chart
+                    appears once there are a few days of history.
+                  </ThemedText>
+                )}
+              </ThemedView>
+
               <ThemedText type="sectionTitle">Recent transactions</ThemedText>
               {data.recentTransactions.map((txn) => (
                 <ThemedView key={txn.id} type="backgroundElement" style={[styles.txnRow, card]}>
@@ -315,6 +466,17 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginTop: Spacing.five,
+  },
+  monthNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  monthArrow: {
+    paddingHorizontal: Spacing.three,
+  },
+  monthArrowDisabled: {
+    opacity: 0.3,
   },
   card: {
     borderRadius: Spacing.three,
@@ -388,6 +550,17 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
   },
+  historyColumn: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  historyBar: {
+    width: '70%',
+    maxWidth: 20,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+  },
   legend: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -411,5 +584,8 @@ const styles = StyleSheet.create({
   txnInfo: {
     flex: 1,
     gap: 2,
+  },
+  pressed: {
+    opacity: 0.7,
   },
 });

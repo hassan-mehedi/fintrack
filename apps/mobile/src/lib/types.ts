@@ -12,6 +12,7 @@ export interface DashboardData {
     categoryColor: string;
     categoryIcon: string;
     total: number;
+    previousTotal: number;
   }[];
   monthlyTrend: {
     month: string;
@@ -19,6 +20,13 @@ export interface DashboardData {
     expense: number;
   }[];
   recentTransactions: TransactionRow[];
+}
+
+export interface NetWorthPoint {
+  date: string;
+  netWorth: number;
+  totalAssets: number;
+  totalLiabilities: number;
 }
 
 export interface TransactionRow {

@@ -36,6 +36,11 @@ export default function BudgetsScreen() {
     setYear(shifted.getFullYear());
   }
 
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
+  const isPastMonth = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
+  const monthProgress = isCurrentMonth ? now.getDate() / daysInMonth : isPastMonth ? 1 : 0;
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -82,8 +87,14 @@ export default function BudgetsScreen() {
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
           renderItem={({ item }) => {
-            const ratio = item.budgetAmount > 0 ? Math.min(item.spent / item.budgetAmount, 1) : 0;
+            const usedRatio = item.budgetAmount > 0 ? item.spent / item.budgetAmount : 0;
+            const ratio = Math.min(usedRatio, 1);
             const overBudget = item.spent > item.budgetAmount;
+            const pace = overBudget
+              ? { label: 'Over budget', color: 'danger' as const }
+              : usedRatio > monthProgress + 0.05
+                ? { label: 'Ahead of pace', color: 'warning' as const }
+                : { label: 'On track', color: 'success' as const };
             return (
               <Pressable
                 onPress={() =>
@@ -116,6 +127,15 @@ export default function BudgetsScreen() {
                         },
                       ]}
                     />
+                  </View>
+                  <View style={styles.budgetHeader}>
+                    <ThemedText type="tiny" themeColor="textSecondary">
+                      {(usedRatio * 100).toFixed(0)}% used · {(monthProgress * 100).toFixed(0)}% of
+                      month gone
+                    </ThemedText>
+                    <ThemedText type="tiny" themeColor={pace.color}>
+                      {pace.label}
+                    </ThemedText>
                   </View>
                 </ThemedView>
               </Pressable>

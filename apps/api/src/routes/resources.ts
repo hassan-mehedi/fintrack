@@ -5,6 +5,7 @@ import * as budgets from "@fintrack/core/budgets";
 import * as categories from "@fintrack/core/categories";
 import * as dashboard from "@fintrack/core/dashboard";
 import * as exporter from "@fintrack/core/export";
+import { getNetWorthHistory } from "@fintrack/core/net-worth";
 import * as recurring from "@fintrack/core/recurring";
 import { processRecurringForUser } from "@fintrack/core/recurring-processor";
 import * as settings from "@fintrack/core/settings";
@@ -22,6 +23,10 @@ const transactionFilters = z.object({
     search: z.string().optional(),
     page: z.coerce.number().int().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+const netWorthHistoryQuery = z.object({
+    months: z.coerce.number().int().min(1).max(24).optional(),
 });
 
 const budgetQuery = z.object({
@@ -151,6 +156,11 @@ export async function resourceRoutes(app: FastifyInstance) {
     app.get("/dashboard", async (req) =>
         dashboard.getDashboardData(userId(req), dashboardQuery.parse(req.query))
     );
+
+    app.get("/net-worth-history", async (req) => {
+        const { months } = netWorthHistoryQuery.parse(req.query);
+        return getNetWorthHistory(userId(req), months);
+    });
 
     app.put("/settings/currency", async (req) => {
         const { currency } = currencyBody.parse(req.body);

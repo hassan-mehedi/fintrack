@@ -5,8 +5,9 @@ import {
     transactions,
 } from "@fintrack/db/schema";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
-import { endOfMonth, format, startOfMonth } from "date-fns";
+import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
 import { isLiabilityAccount } from "./balance";
+import { recordNetWorthSnapshot } from "./net-worth";
 
 export async function getDashboardData(
     userId: string,
@@ -22,9 +23,20 @@ export async function getDashboardData(
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
     const trendStart = format(startOfMonth(sixMonthsAgo), "yyyy-MM-dd");
 
+    // Previous calendar month relative to the range start, for category deltas
+    const prevMonth = subMonths(new Date(dateFrom), 1);
+    const prevFrom = format(startOfMonth(prevMonth), "yyyy-MM-dd");
+    const prevTo = format(endOfMonth(prevMonth), "yyyy-MM-dd");
+
     // These queries are independent — run them in one parallel batch
-    const [accounts, rangeTotalsRows, spendingByCategory, monthlyTrend, recentTransactions] =
-        await Promise.all([
+    const [
+        accounts,
+        rangeTotalsRows,
+        spendingByCategory,
+        previousSpending,
+        monthlyTrend,
+        recentTransactions,
+    ] = await Promise.all([
             db
                 .select()
                 .from(financialAccounts)
@@ -71,6 +83,22 @@ export async function getDashboardData(
                     categories.icon
                 )
                 .orderBy(sql`SUM(${transactions.amount}::numeric + ${transactions.fee}::numeric) DESC`),
+
+            db
+                .select({
+                    categoryId: transactions.categoryId,
+                    total: sql<string>`SUM(${transactions.amount}::numeric + ${transactions.fee}::numeric)`,
+                })
+                .from(transactions)
+                .where(
+                    and(
+                        eq(transactions.userId, userId),
+                        eq(transactions.type, "expense"),
+                        gte(transactions.date, prevFrom),
+                        lte(transactions.date, prevTo)
+                    )
+                )
+                .groupBy(transactions.categoryId),
 
             db
                 .select({
@@ -131,6 +159,22 @@ export async function getDashboardData(
 
     const netWorth = totalAssets - totalLiabilities;
 
+    // Best-effort daily snapshot for the net worth history chart; ignore
+    // failures (e.g. the snapshots migration not applied yet)
+    try {
+        await recordNetWorthSnapshot(userId, {
+            netWorth,
+            totalAssets,
+            totalLiabilities,
+        });
+    } catch {
+        // dashboard data is still valid without the snapshot
+    }
+
+    const previousTotals = new Map(
+        previousSpending.map((s) => [s.categoryId, Number(s.total)])
+    );
+
     return {
         accounts,
         totalBalance: netWorth,
@@ -143,6 +187,7 @@ export async function getDashboardData(
         spendingByCategory: spendingByCategory.map((s) => ({
             ...s,
             total: Number(s.total),
+            previousTotal: previousTotals.get(s.categoryId) ?? 0,
         })),
         monthlyTrend: monthlyTrend.map((t) => ({
             month: t.month,

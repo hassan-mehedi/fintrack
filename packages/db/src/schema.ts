@@ -260,6 +260,21 @@ export const recurringTransactions = pgTable("recurring_transactions", {
   index("recurring_transactions_category_id_idx").on(table.categoryId),
 ]);
 
+// ── Net worth snapshots (one per user per day, upserted on dashboard load) ──
+export const netWorthSnapshots = pgTable("net_worth_snapshots", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  date: date("date", { mode: "string" }).notNull(),
+  netWorth: decimal("net_worth", { precision: 14, scale: 2 }).notNull(),
+  totalAssets: decimal("total_assets", { precision: 14, scale: 2 }).notNull(),
+  totalLiabilities: decimal("total_liabilities", { precision: 14, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("net_worth_snapshots_user_date_idx").on(table.userId, table.date),
+]);
+
 // ── Audit Logs ─────────────────────────────────────────
 export const auditActionEnum = pgEnum("audit_action", [
   "login_success",

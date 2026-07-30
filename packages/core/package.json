@@ -10,6 +10,7 @@
         "./categories": "./src/categories.ts",
         "./dashboard": "./src/dashboard.ts",
         "./errors": "./src/errors.ts",
+        "./net-worth": "./src/net-worth.ts",
         "./export": "./src/export.ts",
         "./recurring": "./src/recurring.ts",
         "./recurring-processor": "./src/recurring-processor.ts",
