@@ -1,0 +1,30 @@
+{
+    "name": "@fintrack/core",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        "./accounts": "./src/accounts.ts",
+        "./balance": "./src/balance.ts",
+        "./budgets": "./src/budgets.ts",
+        "./categories": "./src/categories.ts",
+        "./dashboard": "./src/dashboard.ts",
+        "./errors": "./src/errors.ts",
+        "./export": "./src/export.ts",
+        "./recurring": "./src/recurring.ts",
+        "./recurring-processor": "./src/recurring-processor.ts",
+        "./settings": "./src/settings.ts",
+        "./subscription": "./src/subscription.ts",
+        "./transactions": "./src/transactions.ts"
+    },
+    "dependencies": {
+        "@fintrack/db": "*",
+        "@fintrack/shared": "*",
+        "date-fns": "^4.1.0",
+        "drizzle-orm": "^0.45.1",
+        "zod": "^4.3.6"
+    },
+    "devDependencies": {
+        "typescript": "^5"
+    }
+}

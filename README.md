@@ -94,26 +94,36 @@ npm run test:watch    # Run tests in watch mode
 
 ## Project Structure
 
+This is an npm-workspaces monorepo: one shared business core serving three clients.
+
 ```
-app/
-  (auth)/             # Login and registration pages
-  (dashboard)/        # Protected app pages
-  api/                # API routes (chat, transcribe, translate, auth)
-lib/
-  actions/            # Server actions (all data mutations)
-  db/                 # Schema, migrations, DB client
-  mastra/             # AI agent and tools
-  __tests__/          # Unit tests (Vitest)
-  auth.ts             # NextAuth configuration
-  audit.ts            # Audit log helper (login, logout, register events)
-  chat-guardrails.ts  # Prompt injection defense
-  logger.ts           # Pino logger singleton
-  token-revocation.ts # JWT token revocation via Redis
-components/
-  ui/                 # shadcn/ui primitives
-  dashboard/          # Dashboard-specific components
-  layout/             # Sidebar, header
+apps/
+  web/                # Next.js app (App Router) — the website
+    app/              # Pages + web-only API routes (chat, transcribe, translate, auth)
+    lib/actions/      # Server actions — thin wrappers over @fintrack/core
+  api/                # Fastify REST API for mobile — /v1/* with JWT bearer auth
+    src/auth/         # Access/refresh token issuing, rotation, revocation
+    src/routes/       # auth, resources (CRUD), chat (SSE), transcribe
+  mobile/             # Expo (React Native) Android app — expo-router, SDK 57
+packages/
+  core/               # All business logic (accounts, transactions, budgets, …)
+  db/                 # Drizzle schema, migrations, DB client (drizzle-kit lives here)
+  shared/             # Zod validators, types, currencies
+  ai/                 # Mastra agent, tools, prompt-injection guardrails, AI provider
 ```
+
+Common commands from the repo root:
+
+```bash
+npm run dev:web       # Next.js dev server (localhost:3000)
+npm run dev:api       # Fastify API (localhost:4000)
+npm start -w apps/mobile   # Expo dev server (scan QR with Expo Go)
+npm test              # All test suites (web + packages/ai)
+npm run build         # Build/typecheck every workspace
+npm run db:push -w packages/db   # Drizzle schema push
+```
+
+Mobile builds use EAS: `cd apps/mobile && eas build --profile preview --platform android` (set the real API URL in `apps/mobile/eas.json` first).
 
 ## AI Assistant
 

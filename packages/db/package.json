@@ -1,0 +1,26 @@
+{
+    "name": "@fintrack/db",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": "./src/index.ts",
+        "./schema": "./src/schema.ts",
+        "./seed": "./src/seed.ts"
+    },
+    "scripts": {
+        "db:push": "drizzle-kit push",
+        "db:generate": "drizzle-kit generate",
+        "db:migrate": "drizzle-kit migrate",
+        "db:studio": "drizzle-kit studio"
+    },
+    "dependencies": {
+        "@neondatabase/serverless": "^1.0.2",
+        "drizzle-orm": "^0.45.1"
+    },
+    "devDependencies": {
+        "dotenv": "^17.3.1",
+        "drizzle-kit": "^0.31.10",
+        "typescript": "^5"
+    }
+}

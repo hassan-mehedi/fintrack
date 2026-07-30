@@ -1,0 +1,29 @@
+{
+    "name": "@fintrack/ai",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        "./mastra": "./src/mastra/index.ts",
+        "./provider": "./src/provider.ts",
+        "./guardrails": "./src/guardrails.ts",
+        "./limits": "./src/limits.ts"
+    },
+    "scripts": {
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@ai-sdk/openai": "^3.0.41",
+        "@fintrack/core": "*",
+        "@fintrack/db": "*",
+        "@fintrack/shared": "*",
+        "@mastra/core": "^1.13.2",
+        "date-fns": "^4.1.0",
+        "drizzle-orm": "^0.45.1",
+        "zod": "^4.3.6"
+    },
+    "devDependencies": {
+        "typescript": "^5",
+        "vitest": "^4.1.4"
+    }
+}

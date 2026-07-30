@@ -1,0 +1,44 @@
+import { db } from "@fintrack/db";
+import { auditLogs } from "@fintrack/db/schema";
+import { logger } from "@/lib/logger";
+
+type AuditAction =
+  | "login_success"
+  | "login_failed"
+  | "logout"
+  | "register"
+  | "password_reset_requested"
+  | "password_reset_completed";
+
+export async function createAuditLog({
+  action,
+  userId,
+  ipAddress,
+  userAgent,
+  metadata,
+}: {
+  action: AuditAction;
+  userId?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): Promise<void> {
+  try {
+    await db.insert(auditLogs).values({
+      action,
+      userId: userId ?? null,
+      ipAddress: ipAddress ?? null,
+      userAgent: userAgent ?? null,
+      metadata: metadata ?? null,
+    });
+  } catch (error) {
+    logger.warn(
+      {
+        action,
+        userId,
+        err: error,
+      },
+      "audit log write failed",
+    );
+  }
+}
