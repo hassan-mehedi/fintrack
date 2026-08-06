@@ -147,6 +147,16 @@ export function TransactionForm({
   };
 
   async function onSubmit(data: TransactionInput) {
+    if (data.type === "transfer" && data.toAccountId) {
+      const source = accounts.find((a) => a.id === data.accountId);
+      const dest = accounts.find((a) => a.id === data.toAccountId);
+      if ((source?.currency ?? null) !== (dest?.currency ?? null)) {
+        toast.error(
+          "These accounts use different currencies. Record the conversion as an expense on one side and an income on the other."
+        );
+        return;
+      }
+    }
     setIsLoading(true);
     try {
       if (isEditing) {

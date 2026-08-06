@@ -4,7 +4,21 @@ import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import type { getDashboardData } from "@/lib/actions/dashboard";
+import type {
+  getMonthAnalytics,
+  getSubscriptionCandidates,
+  getYearOverview,
+} from "@/lib/actions/analytics";
 import { DateRangePicker } from "@/components/layout/date-range-picker";
+import {
+  AnomaliesCard,
+  MonthReviewCard,
+  SubscriptionsCard,
+  TopMerchantsCard,
+  WeekdaySplitCard,
+} from "@/components/analytics/insight-cards";
+import { SpendingHeatmap } from "@/components/analytics/spending-heatmap";
+import { CategorySparklines } from "@/components/analytics/category-sparklines";
 import {
   Card,
   CardContent,
@@ -20,6 +34,9 @@ import {
 import { useFormatCurrency } from "@/components/providers/currency-provider";
 
 type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
+type MonthAnalytics = Awaited<ReturnType<typeof getMonthAnalytics>>;
+type YearOverview = Awaited<ReturnType<typeof getYearOverview>>;
+type Subscriptions = Awaited<ReturnType<typeof getSubscriptionCandidates>>;
 
 const SpendingChart = dynamic(
   () =>
@@ -47,7 +64,69 @@ const TrendChart = dynamic(
   }
 );
 
-export function AnalyticsClient({ data }: { data: DashboardData }) {
+const CumulativeChart = dynamic(
+  () =>
+    import("@/components/analytics/cumulative-chart").then(
+      (mod) => mod.CumulativeChart
+    ),
+  {
+    loading: () => (
+      <div className="h-[300px] rounded-lg border bg-card animate-pulse" />
+    ),
+    ssr: false,
+  }
+);
+
+const BudgetHistoryChart = dynamic(
+  () =>
+    import("@/components/analytics/budget-history-chart").then(
+      (mod) => mod.BudgetHistoryChart
+    ),
+  {
+    loading: () => (
+      <div className="h-[300px] rounded-lg border bg-card animate-pulse" />
+    ),
+    ssr: false,
+  }
+);
+
+const SavingsChart = dynamic(
+  () =>
+    import("@/components/analytics/savings-chart").then(
+      (mod) => mod.SavingsChart
+    ),
+  {
+    loading: () => (
+      <div className="h-[300px] rounded-lg border bg-card animate-pulse" />
+    ),
+    ssr: false,
+  }
+);
+
+const YearOverviewChart = dynamic(
+  () =>
+    import("@/components/analytics/year-overview-chart").then(
+      (mod) => mod.YearOverviewChart
+    ),
+  {
+    loading: () => (
+      <div className="h-[300px] rounded-lg border bg-card animate-pulse" />
+    ),
+    ssr: false,
+  }
+);
+
+export function AnalyticsClient({
+  data,
+  analytics,
+  year,
+  subscriptions,
+}: {
+  data: DashboardData;
+  analytics: MonthAnalytics;
+  year: YearOverview;
+  subscriptions: Subscriptions;
+}) {
   const formatCurrency = useFormatCurrency();
   const searchParams = useSearchParams();
   const fromParam = searchParams.get("from");
@@ -125,11 +204,45 @@ export function AnalyticsClient({ data }: { data: DashboardData }) {
         </Card>
       </div>
 
+      <MonthReviewCard review={analytics.monthReview} />
+
+      <AnomaliesCard anomalies={analytics.anomalies} />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <CumulativeChart
+          dailySpend={analytics.dailySpend}
+          prevDailySpend={analytics.prevDailySpend}
+          budgetTotal={analytics.budgetTotal}
+          rangeStart={dateFrom}
+        />
+        <SpendingHeatmap
+          dailySpend={analytics.dailySpend}
+          rangeStart={dateFrom}
+        />
+      </div>
+
       {/* Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
         <SpendingChart data={data.spendingByCategory} />
         <TrendChart data={data.monthlyTrend} />
       </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <CategorySparklines trends={analytics.categoryTrends} />
+        <BudgetHistoryChart history={analytics.budgetHistory} />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <SavingsChart savings={analytics.savings} />
+        <div className="space-y-6">
+          <WeekdaySplitCard split={analytics.weekdaySplit} />
+          <TopMerchantsCard merchants={analytics.topMerchants} />
+        </div>
+      </div>
+
+      <SubscriptionsCard subscriptions={subscriptions} />
+
+      <YearOverviewChart overview={year} />
 
       {/* Top Spending Categories */}
       {data.spendingByCategory.length > 0 && (

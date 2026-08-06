@@ -9,26 +9,35 @@ import {
   ArrowUpDown,
   Landmark,
   CreditCard,
+  PiggyBank,
 } from "lucide-react";
 import { useFormatCurrency } from "@/components/providers/currency-provider";
 
 interface SummaryCardsProps {
+  spendableBalance: number;
   totalAssets: number;
   totalLiabilities: number;
   netWorth: number;
   monthlyIncome: number;
   monthlyExpense: number;
+  totalSavings: number;
+  monthlySavings: number;
 }
 
 export const SummaryCards = memo(function SummaryCards({
+  spendableBalance,
   totalAssets,
   totalLiabilities,
   netWorth,
   monthlyIncome,
   monthlyExpense,
+  totalSavings,
+  monthlySavings,
 }: SummaryCardsProps) {
   const formatCurrency = useFormatCurrency();
   const net = monthlyIncome - monthlyExpense;
+
+  const hasSavings = totalSavings > 0 || monthlySavings > 0;
 
   const cards = useMemo(
     () => [
@@ -38,6 +47,17 @@ export const SummaryCards = memo(function SummaryCards({
         icon: Wallet,
         className: netWorth >= 0 ? "text-primary" : "text-rose-500",
       },
+      ...(hasSavings
+        ? [
+            {
+              title: "Spendable Balance",
+              value: formatCurrency(spendableBalance),
+              hint: "Assets minus money locked in FDR/DPS",
+              icon: Wallet,
+              className: "text-emerald-500",
+            },
+          ]
+        : []),
       {
         title: "Total Assets",
         value: formatCurrency(totalAssets),
@@ -68,8 +88,25 @@ export const SummaryCards = memo(function SummaryCards({
         icon: ArrowUpDown,
         className: net >= 0 ? "text-emerald-500" : "text-rose-500",
       },
+      ...(hasSavings
+        ? [
+            {
+              title: "Locked Savings",
+              value: formatCurrency(totalSavings),
+              hint: "FDR/DPS — counted in net worth, not spendable",
+              icon: PiggyBank,
+              className: "text-emerald-500",
+            },
+            {
+              title: "Saved This Month",
+              value: formatCurrency(monthlySavings),
+              icon: PiggyBank,
+              className: monthlySavings > 0 ? "text-emerald-500" : "text-muted-foreground",
+            },
+          ]
+        : []),
     ],
-    [totalAssets, totalLiabilities, netWorth, monthlyIncome, monthlyExpense, net, formatCurrency]
+    [spendableBalance, totalAssets, totalLiabilities, netWorth, monthlyIncome, monthlyExpense, net, totalSavings, monthlySavings, hasSavings, formatCurrency]
   );
 
   return (
@@ -86,6 +123,9 @@ export const SummaryCards = memo(function SummaryCards({
             <p className={`text-2xl font-bold ${card.className}`}>
               {card.value}
             </p>
+            {"hint" in card && card.hint && (
+              <p className="text-xs text-muted-foreground mt-1">{card.hint}</p>
+            )}
           </CardContent>
         </Card>
       ))}

@@ -46,11 +46,15 @@ import {
   type FinancialAccountInput,
 } from "@fintrack/shared/validators";
 import { ACCOUNT_TYPE_LABELS } from "@fintrack/shared/types";
+import { SUPPORTED_CURRENCIES } from "@fintrack/shared/currencies";
 import { isLiabilityAccount } from "@fintrack/core/balance";
 import type { FinancialAccount } from "@fintrack/shared/types";
 import { toast } from "sonner";
 import { Plus, MoreHorizontal, Trash2, Loader2 } from "lucide-react";
-import { useFormatCurrency } from "@/components/providers/currency-provider";
+import {
+  useCurrency,
+  useFormatCurrency,
+} from "@/components/providers/currency-provider";
 
 const ACCOUNT_TYPES = [
   { value: "bank", label: "Bank" },
@@ -59,12 +63,15 @@ const ACCOUNT_TYPES = [
   { value: "credit_card", label: "Credit Card" },
   { value: "loan", label: "Loan" },
   { value: "custom", label: "Custom" },
+  { value: "fdr", label: "FDR (Fixed Deposit)" },
+  { value: "dps", label: "DPS (Deposit Scheme)" },
 ];
 
 const ACCOUNT_ICONS = ["🏦", "📱", "💵", "💳", "🏧", "👛", "🪙", "💰"];
 
 export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
   const router = useRouter();
+  const baseCurrency = useCurrency();
   const formatCurrency = useFormatCurrency();
   const [formOpen, setFormOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -79,6 +86,7 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
       color: "#10b981",
       defaultFeeRate: "",
       creditLimit: "",
+      currency: baseCurrency,
       isDefault: false,
     },
   });
@@ -113,14 +121,15 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
 
   const assetAccounts = accounts.filter((a) => !isLiabilityAccount(a.type));
   const liabilityAccounts = accounts.filter((a) => isLiabilityAccount(a.type));
-  const totalAssets = assetAccounts.reduce(
-    (sum, acc) => sum + Number(acc.balance),
-    0
-  );
-  const totalLiabilities = liabilityAccounts.reduce(
-    (sum, acc) => sum + Number(acc.balance),
-    0
-  );
+  const inBaseCurrency = (a: FinancialAccount) =>
+    !a.currency || a.currency === baseCurrency;
+  const hasForeignAccounts = accounts.some((a) => !inBaseCurrency(a));
+  const totalAssets = assetAccounts
+    .filter(inBaseCurrency)
+    .reduce((sum, acc) => sum + Number(acc.balance), 0);
+  const totalLiabilities = liabilityAccounts
+    .filter(inBaseCurrency)
+    .reduce((sum, acc) => sum + Number(acc.balance), 0);
   const netWorth = totalAssets - totalLiabilities;
 
   return (
@@ -133,6 +142,11 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
             {totalLiabilities > 0 && (
               <span className="ml-2 text-xs">
                 (Assets: {formatCurrency(totalAssets)} / Liabilities: {formatCurrency(totalLiabilities)})
+              </span>
+            )}
+            {hasForeignAccounts && (
+              <span className="ml-2 text-xs">
+                — foreign-currency accounts not included
               </span>
             )}
           </p>
@@ -299,27 +313,57 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                 />
               </div>
 
-              {showLiabilityFields && (
+              <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="creditLimit"
+                  name="currency"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Credit Limit</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="e.g., 50000.00"
-                          {...field}
-                          value={field.value || ""}
-                        />
-                      </FormControl>
+                      <FormLabel>Currency</FormLabel>
+                      <Select
+                        value={field.value || baseCurrency}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SUPPORTED_CURRENCIES.map((c) => (
+                            <SelectItem key={c.code} value={c.code}>
+                              {c.code} — {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              )}
+
+                {showLiabilityFields && (
+                  <FormField
+                    control={form.control}
+                    name="creditLimit"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Credit Limit</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="e.g., 50000.00"
+                            {...field}
+                            value={field.value || ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
 
               <FormField
                 control={form.control}
@@ -358,9 +402,10 @@ function AccountCard({
   onDelete: (id: string) => void;
   isLiability?: boolean;
 }) {
-  const formatCurrency = useFormatCurrency();
+  const format = useFormatCurrency();
   const balance = Number(account.balance);
   const creditLimit = account.creditLimit ? Number(account.creditLimit) : null;
+  const formatCurrency = (amount: number) => format(amount, false, account.currency);
 
   return (
     <Card className={isLiability ? "border-amber-500/30" : ""}>
@@ -371,6 +416,7 @@ function AccountCard({
             <CardTitle className="text-base">{account.name}</CardTitle>
             <p className="text-xs text-muted-foreground">
               {ACCOUNT_TYPE_LABELS[account.type]}
+              {account.currency ? ` · ${account.currency}` : ""}
             </p>
           </div>
         </div>
@@ -403,6 +449,12 @@ function AccountCard({
         )}
         {creditLimit !== null && creditLimit > 0 && (
           <div className="mt-2">
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-muted-foreground">Available credit</span>
+              <span className="font-medium text-emerald-600">
+                {formatCurrency(Math.max(creditLimit - balance, 0))}
+              </span>
+            </div>
             <div className="flex justify-between text-xs text-muted-foreground mb-1">
               <span>Used</span>
               <span>

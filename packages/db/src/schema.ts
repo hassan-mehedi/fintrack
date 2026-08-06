@@ -21,6 +21,8 @@ export const accountTypeEnum = pgEnum("account_type", [
   "credit_card",
   "loan",
   "custom",
+  "fdr",
+  "dps",
 ]);
 
 export const transactionTypeEnum = pgEnum("transaction_type", [
@@ -144,6 +146,8 @@ export const financialAccounts = pgTable("financial_accounts", {
   color: text("color").notNull().default("#10b981"),
   defaultFeeRate: decimal("default_fee_rate", { precision: 5, scale: 2 }),
   creditLimit: decimal("credit_limit", { precision: 12, scale: 2 }),
+  // null means the account uses the user's base currency
+  currency: text("currency"),
   isDefault: boolean("is_default").notNull().default(false),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),

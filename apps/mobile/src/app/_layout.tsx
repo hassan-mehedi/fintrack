@@ -57,6 +57,7 @@ function RootNavigator() {
         <Stack.Screen name="recurring" />
         <Stack.Screen name="categories" />
         <Stack.Screen name="assistant" />
+        <Stack.Screen name="analytics" />
       </Stack.Protected>
       <Stack.Protected guard={!user}>
         <Stack.Screen name="login" />

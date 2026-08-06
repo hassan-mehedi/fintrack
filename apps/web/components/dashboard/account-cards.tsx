@@ -52,9 +52,10 @@ function AccountCard({
   account: FinancialAccount;
   isLiability?: boolean;
 }) {
-  const formatCurrency = useFormatCurrency();
+  const format = useFormatCurrency();
   const balance = Number(account.balance);
   const creditLimit = account.creditLimit ? Number(account.creditLimit) : null;
+  const formatCurrency = (amount: number) => format(amount, false, account.currency);
 
   return (
     <Card className={`min-w-[180px] flex-shrink-0 ${isLiability ? "border-amber-500/30" : ""}`}>
@@ -65,6 +66,7 @@ function AccountCard({
             <p className="text-sm font-medium truncate">{account.name}</p>
             <p className="text-xs text-muted-foreground">
               {ACCOUNT_TYPE_LABELS[account.type] || account.type}
+              {account.currency ? ` · ${account.currency}` : ""}
             </p>
           </div>
         </div>
@@ -80,8 +82,8 @@ function AccountCard({
         {creditLimit !== null && creditLimit > 0 && (
           <div className="mt-2">
             <div className="flex justify-between text-xs text-muted-foreground mb-1">
-              <span>Used</span>
-              <span>{formatCurrency(creditLimit - balance)} / {formatCurrency(creditLimit)}</span>
+              <span>Available</span>
+              <span>{formatCurrency(Math.max(creditLimit - balance, 0))} / {formatCurrency(creditLimit)}</span>
             </div>
             <div className="h-1.5 bg-muted rounded-full overflow-hidden">
               <div

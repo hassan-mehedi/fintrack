@@ -24,6 +24,7 @@ export async function createAccount(userId: string, data: unknown) {
             color: parsed.color,
             defaultFeeRate: parsed.defaultFeeRate || null,
             creditLimit: parsed.creditLimit || null,
+            currency: parsed.currency || null,
             isDefault: parsed.isDefault,
         })
         .returning();
@@ -44,6 +45,7 @@ export async function updateAccount(userId: string, id: string, data: unknown) {
             color: parsed.color,
             defaultFeeRate: parsed.defaultFeeRate || null,
             creditLimit: parsed.creditLimit || null,
+            currency: parsed.currency || null,
             isDefault: parsed.isDefault,
             updatedAt: new Date(),
         })

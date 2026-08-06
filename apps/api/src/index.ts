@@ -3,7 +3,7 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import { ZodError } from "zod";
-import { NotFoundError } from "@fintrack/core/errors";
+import { NotFoundError, ValidationError } from "@fintrack/core/errors";
 import { env } from "./env.js";
 import { authPlugin } from "./auth/plugin.js";
 import { authRoutes } from "./routes/auth.js";
@@ -20,6 +20,9 @@ app.setErrorHandler((error, request, reply) => {
     }
     if (error instanceof NotFoundError) {
         return reply.code(404).send({ error: error.message });
+    }
+    if (error instanceof ValidationError) {
+        return reply.code(400).send({ error: error.message });
     }
     const { statusCode, message } = error as { statusCode?: number; message?: string };
     if (statusCode && statusCode < 500) {

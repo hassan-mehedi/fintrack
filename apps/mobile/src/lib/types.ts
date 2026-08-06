@@ -5,6 +5,11 @@ export interface DashboardData {
   monthlyIncome: number;
   monthlyExpense: number;
   monthlyFees: number;
+  totalSavings: number;
+  monthlySavings: number;
+  spendableBalance: number;
+  baseCurrency: string;
+  anomalies: Anomaly[];
   accounts: Account[];
   spendingByCategory: {
     categoryId: string;
@@ -20,6 +25,81 @@ export interface DashboardData {
     expense: number;
   }[];
   recentTransactions: TransactionRow[];
+}
+
+export interface Anomaly {
+  id: string;
+  description: string;
+  date: string;
+  categoryName: string;
+  categoryIcon: string;
+  amount: number;
+  categoryAverage: number;
+}
+
+export interface MonthAnalytics {
+  dailySpend: { date: string; total: number }[];
+  prevDailySpend: { date: string; total: number }[];
+  budgetTotal: number;
+  weekdaySplit: { dow: number; total: number }[];
+  topMerchants: { description: string; count: number; total: number }[];
+  monthReview: {
+    income: number;
+    expense: number;
+    fees: number;
+    previousIncome: number;
+    previousExpense: number;
+    biggestTransaction: {
+      id: string;
+      description: string;
+      amount: number;
+      date: string;
+      categoryName: string;
+      categoryIcon: string;
+    } | null;
+    topIncreases: {
+      categoryName: string;
+      categoryIcon: string;
+      delta: number;
+      total: number;
+      previousTotal: number;
+    }[];
+  };
+  anomalies: Anomaly[];
+  categoryTrends: {
+    categoryId: string;
+    categoryName: string;
+    categoryIcon: string;
+    categoryColor: string;
+    months: { month: string; total: number }[];
+  }[];
+  budgetHistory: { month: string; budgeted: number; spent: number }[];
+  savings: {
+    current: number;
+    hasSavingsAccounts: boolean;
+    growth: { month: string; balance: number }[];
+    monthlyAverage: number;
+    projected: { month: string; balance: number }[];
+  };
+}
+
+export interface YearOverview {
+  year: number;
+  months: { month: string; income: number; expense: number; saved: number }[];
+  totals: {
+    income: number;
+    expense: number;
+    saved: number;
+    averageMonthlyExpense: number;
+  };
+}
+
+export interface SubscriptionCandidate {
+  description: string;
+  count: number;
+  averageAmount: number;
+  lastDate: string;
+  monthsSeen: number;
 }
 
 export interface NetWorthPoint {
@@ -97,5 +177,8 @@ export interface Account {
   balance: string;
   icon: string | null;
   color: string | null;
+  currency: string | null;
+  creditLimit: string | null;
+  defaultFeeRate: string | null;
   isDefault: boolean;
 }

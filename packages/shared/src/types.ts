@@ -46,6 +46,8 @@ export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   credit_card: "Credit Card",
   loan: "Loan",
   custom: "Custom",
+  fdr: "FDR (Fixed Deposit)",
+  dps: "DPS (Deposit Scheme)",
 };
 
 // Account classification
@@ -58,9 +60,13 @@ export const ACCOUNT_CLASSIFICATION: Record<string, AccountClassification> = {
   credit_card: "liability",
   loan: "liability",
   custom: "asset",
+  fdr: "asset",
+  dps: "asset",
 };
 
 export const LIABILITY_ACCOUNT_TYPES = ["credit_card", "loan"] as const;
+
+export const SAVINGS_ACCOUNT_TYPES = ["fdr", "dps"] as const;
 
 // Transaction type labels
 export const TRANSACTION_TYPE_LABELS: Record<string, string> = {

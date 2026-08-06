@@ -2,9 +2,10 @@ import { categorySchema } from '@fintrack/shared/validators';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { KeyboardScrollView } from '@/components/form/keyboard-scroll-view';
 import { Segmented } from '@/components/form/segmented';
 import { TextField } from '@/components/form/text-field';
 import { ThemedText } from '@/components/themed-text';
@@ -91,7 +92,7 @@ export default function CategoryFormScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.content}>
+        <KeyboardScrollView contentContainerStyle={styles.content}>
           <ThemedText type="title">{isEditing ? 'Edit category' : 'New category'}</ThemedText>
 
           <TextField
@@ -166,7 +167,7 @@ export default function CategoryFormScreen() {
               </ThemedText>
             </Pressable>
           )}
-        </ScrollView>
+        </KeyboardScrollView>
       </SafeAreaView>
     </ThemedView>
   );

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import * as accounts from "@fintrack/core/accounts";
+import * as analytics from "@fintrack/core/analytics";
 import * as budgets from "@fintrack/core/budgets";
 import * as categories from "@fintrack/core/categories";
 import * as dashboard from "@fintrack/core/dashboard";
@@ -37,6 +38,10 @@ const budgetQuery = z.object({
 const dashboardQuery = z.object({
     from: z.string().optional(),
     to: z.string().optional(),
+});
+
+const yearQuery = z.object({
+    year: z.coerce.number().int().min(2000).max(2100).optional(),
 });
 
 const categoryQuery = z.object({
@@ -155,6 +160,20 @@ export async function resourceRoutes(app: FastifyInstance) {
 
     app.get("/dashboard", async (req) =>
         dashboard.getDashboardData(userId(req), dashboardQuery.parse(req.query))
+    );
+
+    app.get("/analytics", async (req) =>
+        analytics.getMonthAnalytics(userId(req), dashboardQuery.parse(req.query))
+    );
+    app.get("/analytics/year", async (req) => {
+        const { year } = yearQuery.parse(req.query);
+        return analytics.getYearOverview(
+            userId(req),
+            year ?? new Date().getFullYear()
+        );
+    });
+    app.get("/analytics/subscriptions", async (req) =>
+        analytics.getSubscriptionCandidates(userId(req))
     );
 
     app.get("/net-worth-history", async (req) => {

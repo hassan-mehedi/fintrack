@@ -62,12 +62,24 @@ export default function AccountsScreen() {
                   </ThemedText>
                   <ThemedText type="small" themeColor="textSecondary">
                     {item.type}
+                    {item.currency ? ` · ${item.currency}` : ''}
                     {item.isDefault ? ' · default' : ''}
                   </ThemedText>
                 </View>
-                <ThemedText type="smallBold">
-                  {formatMoney(Number(item.balance), currency)}
-                </ThemedText>
+                <View style={styles.accountAmounts}>
+                  <ThemedText type="smallBold">
+                    {formatMoney(Number(item.balance), item.currency ?? currency)}
+                  </ThemedText>
+                  {item.creditLimit && Number(item.creditLimit) > 0 && (
+                    <ThemedText type="tiny" themeColor="success">
+                      Available{' '}
+                      {formatMoney(
+                        Math.max(Number(item.creditLimit) - Number(item.balance), 0),
+                        item.currency ?? currency
+                      )}
+                    </ThemedText>
+                  )}
+                </View>
               </ThemedView>
             </Pressable>
           )}
@@ -128,6 +140,10 @@ const styles = StyleSheet.create({
   },
   accountInfo: {
     flex: 1,
+    gap: 2,
+  },
+  accountAmounts: {
+    alignItems: 'flex-end',
     gap: 2,
   },
 });

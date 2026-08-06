@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { KeyboardScrollView } from '@/components/form/keyboard-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
@@ -44,6 +45,7 @@ export default function LoginScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
+        <KeyboardScrollView contentContainerStyle={styles.content}>
         <ThemedText type="title" style={styles.title}>
           FinTrack
         </ThemedText>
@@ -94,6 +96,7 @@ export default function LoginScreen() {
             </ThemedText>
           )}
         </Pressable>
+        </KeyboardScrollView>
       </SafeAreaView>
     </ThemedView>
   );
@@ -107,10 +110,13 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+    maxWidth: MaxContentWidth,
+  },
+  content: {
+    flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: Spacing.four,
     gap: Spacing.three,
-    maxWidth: MaxContentWidth,
   },
   title: {
     textAlign: 'center',

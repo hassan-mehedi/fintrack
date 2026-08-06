@@ -27,7 +27,8 @@ export function useCurrency(): CurrencyCode {
 export function useFormatCurrency() {
   const currency = useCurrency();
   return useCallback(
-    (amount: number, rounded = false) => formatCurrencyUtil(amount, rounded, currency),
+    (amount: number, rounded = false, currencyOverride?: CurrencyCode | string | null) =>
+      formatCurrencyUtil(amount, rounded, (currencyOverride as CurrencyCode) || currency),
     [currency],
   );
 }

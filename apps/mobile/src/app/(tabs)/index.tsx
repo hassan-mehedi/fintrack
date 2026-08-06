@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -10,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LineChart } from 'react-native-gifted-charts';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -28,6 +30,8 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   credit_card: 'Credit card',
   loan: 'Loan',
   custom: 'Custom',
+  fdr: 'FDR',
+  dps: 'DPS',
 };
 
 const MONTH_NAMES = [
@@ -105,9 +109,11 @@ export default function DashboardScreen() {
     ? Math.max(...data.monthlyTrend.flatMap((t) => [t.income, t.expense]), 1)
     : 1;
 
-  const historyMin = history?.length ? Math.min(...history.map((p) => p.netWorth)) : 0;
-  const historyMax = history?.length ? Math.max(...history.map((p) => p.netWorth)) : 1;
-  const historyRange = historyMax - historyMin || 1;
+  const chartWidth =
+    Math.min(Dimensions.get('window').width, MaxContentWidth) -
+    Spacing.four * 2 -
+    Spacing.three * 2 -
+    48;
 
   return (
     <ThemedView style={styles.container}>
@@ -115,7 +121,17 @@ export default function DashboardScreen() {
         <ScrollView
           contentContainerStyle={styles.content}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}>
-          <ThemedText type="heading">Dashboard</ThemedText>
+          <View style={styles.headerRow}>
+            <ThemedText type="heading">Dashboard</ThemedText>
+            <Pressable
+              onPress={() => router.push('/analytics')}
+              hitSlop={8}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <ThemedText type="smallBold" themeColor="primary">
+                Analytics ›
+              </ThemedText>
+            </Pressable>
+          </View>
 
           <View style={styles.monthNav}>
             <Pressable onPress={() => shiftMonth(-1)} style={styles.monthArrow} hitSlop={8}>
@@ -167,6 +183,12 @@ export default function DashboardScreen() {
                     </ThemedText>
                   </View>
                 </View>
+                {data.totalSavings > 0 && (
+                  <ThemedText type="tiny" themeColor="textSecondary">
+                    Spendable {formatMoney(data.spendableBalance, currency)} · locked in
+                    FDR/DPS {formatMoney(data.totalSavings, currency)}
+                  </ThemedText>
+                )}
               </ThemedView>
 
               <View style={styles.row}>
@@ -230,6 +252,42 @@ export default function DashboardScreen() {
                 </ThemedView>
               </View>
 
+              {(data.totalSavings > 0 || data.monthlySavings > 0) && (
+                <ThemedView type="backgroundElement" style={[styles.card, card]}>
+                  <View style={styles.spendingHeader}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Saved this month
+                    </ThemedText>
+                    <ThemedText type="smallBold" themeColor="success">
+                      {formatMoney(data.monthlySavings, currency)}
+                    </ThemedText>
+                  </View>
+                  <ThemedText type="tiny" themeColor="textSecondary">
+                    Total in savings (FDR/DPS): {formatMoney(data.totalSavings, currency)}
+                  </ThemedText>
+                </ThemedView>
+              )}
+
+              {data.anomalies.length > 0 && (
+                <Pressable
+                  onPress={() => router.push('/analytics')}
+                  style={({ pressed }) => pressed && styles.pressed}>
+                  <ThemedView
+                    type="backgroundElement"
+                    style={[styles.card, card, { borderColor: theme.warning }]}>
+                    <ThemedText type="smallBold">
+                      ⚠️ {data.anomalies.length} unusually large expense
+                      {data.anomalies.length === 1 ? '' : 's'} this month
+                    </ThemedText>
+                    <ThemedText type="tiny" themeColor="textSecondary" numberOfLines={1}>
+                      Biggest: {data.anomalies[0].categoryIcon}{' '}
+                      {data.anomalies[0].description || data.anomalies[0].categoryName} —{' '}
+                      {formatMoney(data.anomalies[0].amount, currency)}. Tap for details.
+                    </ThemedText>
+                  </ThemedView>
+                </Pressable>
+              )}
+
               {isCurrentMonth && (
                 <ThemedView type="backgroundElement" style={[styles.card, card]}>
                   <View style={styles.spendingHeader}>
@@ -269,13 +327,23 @@ export default function DashboardScreen() {
                           </ThemedText>
                           <ThemedText type="tiny" themeColor="textSecondary">
                             {ACCOUNT_TYPE_LABELS[account.type] ?? account.type}
+                            {account.currency ? ` · ${account.currency}` : ''}
                           </ThemedText>
                           <ThemedText
                             type="defaultBold"
                             themeColor={isLiability ? 'danger' : 'text'}
                             numberOfLines={1}>
-                            {formatMoney(Number(account.balance), currency)}
+                            {formatMoney(Number(account.balance), account.currency ?? currency)}
                           </ThemedText>
+                          {isLiability && account.creditLimit && Number(account.creditLimit) > 0 && (
+                            <ThemedText type="tiny" themeColor="success" numberOfLines={1}>
+                              Available{' '}
+                              {formatMoney(
+                                Math.max(Number(account.creditLimit) - Number(account.balance), 0),
+                                account.currency ?? currency
+                              )}
+                            </ThemedText>
+                          )}
                         </ThemedView>
                       );
                     })}
@@ -386,31 +454,37 @@ export default function DashboardScreen() {
               <ThemedView type="backgroundElement" style={[styles.card, card]}>
                 {history && history.length >= 2 ? (
                   <>
-                    <View style={styles.trendChart}>
-                      {history.map((point) => (
-                        <View key={point.date} style={styles.historyColumn}>
-                          <View
-                            style={[
-                              styles.historyBar,
-                              {
-                                backgroundColor: theme.primary,
-                                height: `${
-                                  ((point.netWorth - historyMin) / historyRange) * 80 + 20
-                                }%`,
-                              },
-                            ]}
-                          />
-                        </View>
-                      ))}
-                    </View>
-                    <View style={styles.spendingHeader}>
-                      <ThemedText type="tiny" themeColor="textSecondary">
-                        {shortDate(history[0].date)}
-                      </ThemedText>
-                      <ThemedText type="tiny" themeColor="textSecondary">
-                        {shortDate(history[history.length - 1].date)}
-                      </ThemedText>
-                    </View>
+                    <LineChart
+                      data={history.map((point, i) => ({
+                        value: point.netWorth,
+                        label:
+                          i % Math.max(Math.ceil(history.length / 4), 1) === 0
+                            ? shortDate(point.date)
+                            : '',
+                      }))}
+                      color1={theme.primary}
+                      thickness={2}
+                      hideDataPoints
+                      curved
+                      width={chartWidth}
+                      height={140}
+                      adjustToWidth
+                      initialSpacing={0}
+                      endSpacing={0}
+                      disableScroll
+                      yAxisThickness={0}
+                      xAxisThickness={0}
+                      noOfSections={4}
+                      rulesColor={theme.border}
+                      yAxisTextStyle={{ color: theme.textSecondary, fontSize: 10 }}
+                      xAxisLabelTextStyle={{ color: theme.textSecondary, fontSize: 10 }}
+                      formatYLabel={(label) => {
+                        const value = Number(label);
+                        return Math.abs(value) >= 1000
+                          ? `${Math.round(value / 1000)}k`
+                          : String(Math.round(value));
+                      }}
+                    />
                   </>
                 ) : (
                   <ThemedText type="small" themeColor="textSecondary">
@@ -550,16 +624,10 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
   },
-  historyColumn: {
-    flex: 1,
-    justifyContent: 'flex-end',
+  headerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  historyBar: {
-    width: '70%',
-    maxWidth: 20,
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
+    justifyContent: 'space-between',
   },
   legend: {
     flexDirection: 'row',

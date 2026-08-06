@@ -2,9 +2,10 @@ import { budgetSchema } from '@fintrack/shared/validators';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { KeyboardScrollView } from '@/components/form/keyboard-scroll-view';
 import { SelectField } from '@/components/form/select-field';
 import { TextField } from '@/components/form/text-field';
 import { ThemedText } from '@/components/themed-text';
@@ -92,7 +93,7 @@ export default function BudgetFormScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.content}>
+        <KeyboardScrollView contentContainerStyle={styles.content}>
           <ThemedText type="title">{isEditing ? 'Edit budget' : 'New budget'}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             {month}/{year}
@@ -149,7 +150,7 @@ export default function BudgetFormScreen() {
               </ThemedText>
             </Pressable>
           )}
-        </ScrollView>
+        </KeyboardScrollView>
       </SafeAreaView>
     </ThemedView>
   );

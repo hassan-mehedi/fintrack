@@ -3,9 +3,12 @@ import {
     categories,
     financialAccounts,
     transactions,
+    users,
 } from "@fintrack/db/schema";
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, notInArray, sql } from "drizzle-orm";
 import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
+import { SAVINGS_ACCOUNT_TYPES } from "@fintrack/shared/types";
+import { getSpendingAnomalies } from "./analytics";
 import { isLiabilityAccount } from "./balance";
 import { recordNetWorthSnapshot } from "./net-worth";
 
@@ -28,21 +31,46 @@ export async function getDashboardData(
     const prevFrom = format(startOfMonth(prevMonth), "yyyy-MM-dd");
     const prevTo = format(endOfMonth(prevMonth), "yyyy-MM-dd");
 
+    // Accounts and the user's base currency come first: foreign-currency
+    // accounts can't be summed with base-currency ones, so their ids are
+    // needed to scope every aggregate below
+    const [[userRow], accounts] = await Promise.all([
+        db
+            .select({ currency: users.currency })
+            .from(users)
+            .where(eq(users.id, userId)),
+        db
+            .select()
+            .from(financialAccounts)
+            .where(eq(financialAccounts.userId, userId))
+            .orderBy(desc(financialAccounts.isDefault)),
+    ]);
+
+    const baseCurrency = userRow?.currency ?? "BDT";
+    const isBaseCurrency = (currency: string | null) =>
+        !currency || currency === baseCurrency;
+    const foreignAccountIds = accounts
+        .filter((acc) => !isBaseCurrency(acc.currency))
+        .map((acc) => acc.id);
+    const excludeForeign = foreignAccountIds.length
+        ? notInArray(transactions.accountId, foreignAccountIds)
+        : undefined;
+
+    const savingsTypes: string[] = [...SAVINGS_ACCOUNT_TYPES];
+    const baseSavingsAccountIds = accounts
+        .filter((acc) => savingsTypes.includes(acc.type) && isBaseCurrency(acc.currency))
+        .map((acc) => acc.id);
+
     // These queries are independent — run them in one parallel batch
     const [
-        accounts,
         rangeTotalsRows,
         spendingByCategory,
         previousSpending,
         monthlyTrend,
         recentTransactions,
+        savingsRows,
+        anomalies,
     ] = await Promise.all([
-            db
-                .select()
-                .from(financialAccounts)
-                .where(eq(financialAccounts.userId, userId))
-                .orderBy(desc(financialAccounts.isDefault)),
-
             db
                 .select({
                     totalIncome: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${transactions.amount}::numeric ELSE 0 END), 0)`,
@@ -54,7 +82,8 @@ export async function getDashboardData(
                     and(
                         eq(transactions.userId, userId),
                         gte(transactions.date, dateFrom),
-                        lte(transactions.date, dateTo)
+                        lte(transactions.date, dateTo),
+                        excludeForeign
                     )
                 ),
 
@@ -73,7 +102,8 @@ export async function getDashboardData(
                         eq(transactions.userId, userId),
                         eq(transactions.type, "expense"),
                         gte(transactions.date, dateFrom),
-                        lte(transactions.date, dateTo)
+                        lte(transactions.date, dateTo),
+                        excludeForeign
                     )
                 )
                 .groupBy(
@@ -95,7 +125,8 @@ export async function getDashboardData(
                         eq(transactions.userId, userId),
                         eq(transactions.type, "expense"),
                         gte(transactions.date, prevFrom),
-                        lte(transactions.date, prevTo)
+                        lte(transactions.date, prevTo),
+                        excludeForeign
                     )
                 )
                 .groupBy(transactions.categoryId),
@@ -111,7 +142,8 @@ export async function getDashboardData(
                     and(
                         eq(transactions.userId, userId),
                         gte(transactions.date, trendStart),
-                        lte(transactions.date, dateTo)
+                        lte(transactions.date, dateTo),
+                        excludeForeign
                     )
                 )
                 .groupBy(sql`TO_CHAR(${transactions.date}::date, 'YYYY-MM')`)
@@ -145,19 +177,51 @@ export async function getDashboardData(
                 )
                 .orderBy(desc(transactions.date), desc(transactions.createdAt))
                 .limit(10),
+
+            baseSavingsAccountIds.length
+                ? db
+                      .select({
+                          total: sql<string>`COALESCE(SUM(${transactions.amount}::numeric), 0)`,
+                      })
+                      .from(transactions)
+                      .where(
+                          and(
+                              eq(transactions.userId, userId),
+                              eq(transactions.type, "transfer"),
+                              inArray(transactions.toAccountId, baseSavingsAccountIds),
+                              gte(transactions.date, dateFrom),
+                              lte(transactions.date, dateTo)
+                          )
+                      )
+                : Promise.resolve([{ total: "0" }]),
+
+            getSpendingAnomalies(userId, { from: dateFrom, to: dateTo }),
         ]);
 
     const rangeTotals = rangeTotalsRows[0];
 
-    const totalAssets = accounts
+    // Totals only make sense within one currency, so foreign-currency
+    // accounts are left out and shown individually instead
+    const baseAccounts = accounts.filter((acc) => isBaseCurrency(acc.currency));
+
+    const totalAssets = baseAccounts
         .filter((acc) => !isLiabilityAccount(acc.type))
         .reduce((sum, acc) => sum + Number(acc.balance), 0);
 
-    const totalLiabilities = accounts
+    const totalLiabilities = baseAccounts
         .filter((acc) => isLiabilityAccount(acc.type))
         .reduce((sum, acc) => sum + Number(acc.balance), 0);
 
     const netWorth = totalAssets - totalLiabilities;
+
+    const totalSavings = baseAccounts
+        .filter((acc) => savingsTypes.includes(acc.type))
+        .reduce((sum, acc) => sum + Number(acc.balance), 0);
+    const monthlySavings = Number(savingsRows[0]?.total || 0);
+
+    // What the user can actually spend: liquid assets, excluding money
+    // locked away in FDR/DPS
+    const spendableBalance = totalAssets - totalSavings;
 
     // Best-effort daily snapshot for the net worth history chart; ignore
     // failures (e.g. the snapshots migration not applied yet)
@@ -184,6 +248,11 @@ export async function getDashboardData(
         monthlyIncome: Number(rangeTotals?.totalIncome || 0),
         monthlyExpense: Number(rangeTotals?.totalExpense || 0),
         monthlyFees: Number(rangeTotals?.totalFees || 0),
+        totalSavings,
+        monthlySavings,
+        spendableBalance,
+        baseCurrency,
+        anomalies,
         spendingByCategory: spendingByCategory.map((s) => ({
             ...s,
             total: Number(s.total),

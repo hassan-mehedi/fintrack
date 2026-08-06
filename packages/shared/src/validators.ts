@@ -46,7 +46,7 @@ export const resetPasswordSchema = z
 // ── Financial Account ──────────────────────────────────
 export const financialAccountSchema = z.object({
   name: z.string().min(1, "Account name is required"),
-  type: z.enum(["bank", "mobile_banking", "cash", "credit_card", "loan", "custom"]),
+  type: z.enum(["bank", "mobile_banking", "cash", "credit_card", "loan", "custom", "fdr", "dps"]),
   balance: z.string().refine((val) => !isNaN(Number(val)), "Must be a number"),
   icon: z.string(),
   color: z.string(),
@@ -62,6 +62,7 @@ export const financialAccountSchema = z.object({
     .optional()
     .nullable()
     .refine((val) => !val || !isNaN(Number(val)), "Must be a number"),
+  currency: z.enum(CURRENCY_CODES).optional().nullable(),
   isDefault: z.boolean(),
 });
 

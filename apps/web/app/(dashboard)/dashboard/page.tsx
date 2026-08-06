@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import dynamic from "next/dynamic";
 import { getDashboardData } from "@/lib/actions/dashboard";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
+import { AnomaliesCard } from "@/components/analytics/insight-cards";
 import { AccountCards } from "@/components/dashboard/account-cards";
 import { RecentTransactions } from "@/components/dashboard/recent-transactions";
 import { DateRangePicker } from "@/components/layout/date-range-picker";
@@ -57,12 +58,17 @@ export default async function DashboardPage({
       </div>
 
       <SummaryCards
+        spendableBalance={data.spendableBalance}
         totalAssets={data.totalAssets}
         totalLiabilities={data.totalLiabilities}
         netWorth={data.netWorth}
         monthlyIncome={data.monthlyIncome}
         monthlyExpense={data.monthlyExpense}
+        totalSavings={data.totalSavings}
+        monthlySavings={data.monthlySavings}
       />
+
+      <AnomaliesCard anomalies={data.anomalies} />
 
       <AccountCards accounts={data.accounts as FinancialAccount[]} />
 

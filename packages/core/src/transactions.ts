@@ -8,7 +8,7 @@ import { transactionSchema } from "@fintrack/shared/validators";
 import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { getBalanceDelta, getTransferDeltas } from "./balance";
-import { NotFoundError } from "./errors";
+import { NotFoundError, ValidationError } from "./errors";
 
 type Batch = [BatchItem<"pg">, ...BatchItem<"pg">[]];
 
@@ -29,6 +29,21 @@ async function getAccountTypes(ids: string[]): Promise<Map<string, string>> {
         .from(financialAccounts)
         .where(inArray(financialAccounts.id, ids));
     return new Map(rows.map((r) => [r.id, r.type]));
+}
+
+// Balances are plain numbers with no exchange rate attached, so moving money
+// between accounts in different currencies would silently corrupt both sides.
+async function assertSameCurrency(sourceId: string, destId: string) {
+    const rows = await db
+        .select({ id: financialAccounts.id, currency: financialAccounts.currency })
+        .from(financialAccounts)
+        .where(inArray(financialAccounts.id, [sourceId, destId]));
+    const currencies = new Map(rows.map((r) => [r.id, r.currency]));
+    if (currencies.get(sourceId) !== currencies.get(destId)) {
+        throw new ValidationError(
+            "These accounts use different currencies. Record the conversion as an expense on one side and an income on the other instead."
+        );
+    }
 }
 
 function balanceUpdate(accountId: string, delta: number) {
@@ -152,6 +167,7 @@ export async function createTransaction(userId: string, data: unknown) {
         );
         writes.push(balanceUpdate(parsed.accountId, delta));
     } else if (parsed.type === "transfer" && parsed.toAccountId) {
+        await assertSameCurrency(parsed.accountId, parsed.toAccountId);
         const types = await getAccountTypes([parsed.accountId, parsed.toAccountId]);
         const { sourceDelta, destDelta } = getTransferDeltas(
             types.get(parsed.accountId)!, types.get(parsed.toAccountId)!, amount, fee
@@ -179,6 +195,10 @@ export async function updateTransaction(userId: string, id: string, data: unknow
 
     const oldAmount = Number(oldTxn.amount);
     const oldFee = Number(oldTxn.fee);
+
+    if (parsed.type === "transfer" && parsed.toAccountId) {
+        await assertSameCurrency(parsed.accountId, parsed.toAccountId);
+    }
 
     const ids = [oldTxn.accountId, parsed.accountId];
     if (oldTxn.toAccountId) ids.push(oldTxn.toAccountId);

@@ -5,6 +5,7 @@
     "type": "module",
     "exports": {
         "./accounts": "./src/accounts.ts",
+        "./analytics": "./src/analytics.ts",
         "./balance": "./src/balance.ts",
         "./budgets": "./src/budgets.ts",
         "./categories": "./src/categories.ts",

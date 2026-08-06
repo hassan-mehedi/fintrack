@@ -1,4 +1,9 @@
 import { getDashboardData } from "@/lib/actions/dashboard";
+import {
+  getMonthAnalytics,
+  getSubscriptionCandidates,
+  getYearOverview,
+} from "@/lib/actions/analytics";
 import { AnalyticsClient } from "./analytics-client";
 
 export default async function AnalyticsPage({
@@ -7,10 +12,21 @@ export default async function AnalyticsPage({
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const params = await searchParams;
-  const data = await getDashboardData({
-    from: params.from,
-    to: params.to,
-  });
+  const range = { from: params.from, to: params.to };
 
-  return <AnalyticsClient data={data} />;
+  const [data, analytics, year, subscriptions] = await Promise.all([
+    getDashboardData(range),
+    getMonthAnalytics(range),
+    getYearOverview(),
+    getSubscriptionCandidates(),
+  ]);
+
+  return (
+    <AnalyticsClient
+      data={data}
+      analytics={analytics}
+      year={year}
+      subscriptions={subscriptions}
+    />
+  );
 }

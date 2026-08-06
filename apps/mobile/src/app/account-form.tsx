@@ -1,3 +1,4 @@
+import { SUPPORTED_CURRENCIES } from '@fintrack/shared/currencies';
 import { financialAccountSchema } from '@fintrack/shared/validators';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -5,13 +6,13 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Switch,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { KeyboardScrollView } from '@/components/form/keyboard-scroll-view';
 import { SelectField } from '@/components/form/select-field';
 import { TextField } from '@/components/form/text-field';
 import { ThemedText } from '@/components/themed-text';
@@ -19,6 +20,7 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { apiFetch } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { errorFeedback, successFeedback } from '@/lib/haptics';
 import type { Account } from '@/lib/types';
 
@@ -29,16 +31,23 @@ const ACCOUNT_TYPES = [
   { value: 'credit_card', label: '💳 Credit card' },
   { value: 'loan', label: '🧾 Loan' },
   { value: 'custom', label: '✨ Custom' },
+  { value: 'fdr', label: '🏛️ FDR (Fixed Deposit)' },
+  { value: 'dps', label: '🐷 DPS (Deposit Scheme)' },
 ];
 
 const COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#f97316', '#8b5cf6', '#14b8a6'];
 
+const CURRENCY_OPTIONS = SUPPORTED_CURRENCIES.map((c) => ({
+  value: c.code,
+  label: `${c.code} — ${c.name}`,
+}));
+
 export default function AccountFormScreen() {
   const theme = useTheme();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const params = useLocalSearchParams<{ prefill?: string }>();
-  const prefill: (Account & { defaultFeeRate?: string | null; creditLimit?: string | null }) | null =
-    params.prefill ? JSON.parse(params.prefill) : null;
+  const prefill: Account | null = params.prefill ? JSON.parse(params.prefill) : null;
   const isEditing = !!prefill?.id;
 
   const [name, setName] = useState(prefill?.name ?? '');
@@ -47,6 +56,9 @@ export default function AccountFormScreen() {
   const [icon, setIcon] = useState(prefill?.icon ?? '💰');
   const [color, setColor] = useState(prefill?.color ?? COLORS[0]);
   const [creditLimit, setCreditLimit] = useState(prefill?.creditLimit ?? '');
+  const [accountCurrency, setAccountCurrency] = useState<string | null>(
+    prefill?.currency ?? user?.currency ?? 'BDT'
+  );
   const [isDefault, setIsDefault] = useState(prefill?.isDefault ?? false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -76,6 +88,7 @@ export default function AccountFormScreen() {
       color,
       defaultFeeRate: prefill?.defaultFeeRate ?? undefined,
       creditLimit: creditLimit || null,
+      currency: accountCurrency,
       isDefault,
     };
 
@@ -96,7 +109,7 @@ export default function AccountFormScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.content}>
+        <KeyboardScrollView contentContainerStyle={styles.content}>
           <ThemedText type="title">{isEditing ? 'Edit account' : 'New account'}</ThemedText>
 
           <TextField
@@ -135,6 +148,15 @@ export default function AccountFormScreen() {
               error={errors.creditLimit}
             />
           )}
+
+          <SelectField
+            label="Currency"
+            placeholder="Select currency"
+            options={CURRENCY_OPTIONS}
+            value={accountCurrency}
+            onChange={setAccountCurrency}
+            error={errors.currency}
+          />
 
           <TextField label="Icon" placeholder="Emoji" value={icon ?? ''} onChangeText={setIcon} />
 
@@ -184,7 +206,7 @@ export default function AccountFormScreen() {
               </ThemedText>
             )}
           </Pressable>
-        </ScrollView>
+        </KeyboardScrollView>
       </SafeAreaView>
     </ThemedView>
   );

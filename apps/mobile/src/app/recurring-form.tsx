@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DateField } from '@/components/form/date-field';
+import { KeyboardScrollView } from '@/components/form/keyboard-scroll-view';
 import { Segmented } from '@/components/form/segmented';
 import { SelectField } from '@/components/form/select-field';
 import { TextField } from '@/components/form/text-field';
@@ -129,7 +130,7 @@ export default function RecurringFormScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.content}>
+        <KeyboardScrollView contentContainerStyle={styles.content}>
           <ThemedText type="title">
             {isEditing ? 'Edit recurring rule' : 'New recurring rule'}
           </ThemedText>
@@ -250,7 +251,7 @@ export default function RecurringFormScreen() {
               </ThemedText>
             </Pressable>
           )}
-        </ScrollView>
+        </KeyboardScrollView>
       </SafeAreaView>
     </ThemedView>
   );
