@@ -68,6 +68,9 @@ export const LIABILITY_ACCOUNT_TYPES = ["credit_card", "loan"] as const;
 
 export const SAVINGS_ACCOUNT_TYPES = ["fdr", "dps"] as const;
 
+// Money the user can actually spend right now
+export const LIQUID_ACCOUNT_TYPES = ["bank", "mobile_banking", "cash"] as const;
+
 // Transaction type labels
 export const TRANSACTION_TYPE_LABELS: Record<string, string> = {
   income: "Income",

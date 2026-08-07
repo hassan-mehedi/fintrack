@@ -93,6 +93,30 @@ function AccountCard({
             </div>
           </div>
         )}
+        {account.secondaryCurrency && (
+          <div className="mt-2 border-t pt-1 text-xs text-muted-foreground">
+            <p>
+              {account.secondaryCurrency}:{" "}
+              <span className="font-medium text-amber-500">
+                {format(Number(account.secondaryBalance || 0), false, account.secondaryCurrency)} owed
+              </span>
+            </p>
+            {account.secondaryCreditLimit && Number(account.secondaryCreditLimit) > 0 && (
+              <p>
+                Available{" "}
+                {format(
+                  Math.max(
+                    Number(account.secondaryCreditLimit) - Number(account.secondaryBalance || 0),
+                    0
+                  ),
+                  false,
+                  account.secondaryCurrency
+                )}{" "}
+                / {format(Number(account.secondaryCreditLimit), false, account.secondaryCurrency)}
+              </p>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

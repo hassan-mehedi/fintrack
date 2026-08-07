@@ -148,6 +148,16 @@ export const financialAccounts = pgTable("financial_accounts", {
   creditLimit: decimal("credit_limit", { precision: 12, scale: 2 }),
   // null means the account uses the user's base currency
   currency: text("currency"),
+  // optional second currency side (e.g. the USD side of a dual-currency
+  // credit card) with its own running balance and limit
+  secondaryCurrency: text("secondary_currency"),
+  secondaryBalance: decimal("secondary_balance", { precision: 12, scale: 2 })
+    .notNull()
+    .default("0"),
+  secondaryCreditLimit: decimal("secondary_credit_limit", {
+    precision: 12,
+    scale: 2,
+  }),
   isDefault: boolean("is_default").notNull().default(false),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
@@ -189,6 +199,12 @@ export const transactions = pgTable("transactions", {
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   fee: decimal("fee", { precision: 12, scale: 2 }).notNull().default("0"),
   type: transactionTypeEnum("type").notNull(),
+  // set only when the transaction hits an account's secondary currency
+  // side; null means the account's primary currency
+  currency: text("currency"),
+  toCurrency: text("to_currency"),
+  // for cross-currency transfers: what the destination actually received
+  amountReceived: decimal("amount_received", { precision: 12, scale: 2 }),
   description: text("description").notNull().default(""),
   date: date("date", { mode: "string" }).notNull(),
   tags: text("tags")

@@ -157,6 +157,9 @@ export function TransactionsClient({
       categoryId: txn.categoryId,
       toAccountId: txn.toAccountId,
       tags: txn.tags || [],
+      currency: txn.currency,
+      toCurrency: txn.toCurrency,
+      amountReceived: txn.amountReceived,
     });
     setFormOpen(true);
   };
@@ -335,11 +338,11 @@ export function TransactionsClient({
                       }`}
                     >
                       {txn.type === "income" ? "+" : "-"}
-                      {formatCurrency(txn.amount)}
+                      {formatCurrency(txn.amount, false, txn.currency ?? txn.accountCurrency)}
                     </span>
                     {txn.fee > 0 && (
                       <p className="text-xs text-muted-foreground">
-                        Fee: {formatCurrency(txn.fee)}
+                        Fee: {formatCurrency(txn.fee, false, txn.currency ?? txn.accountCurrency)}
                       </p>
                     )}
                   </TableCell>

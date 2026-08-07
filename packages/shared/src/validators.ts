@@ -63,6 +63,17 @@ export const financialAccountSchema = z.object({
     .nullable()
     .refine((val) => !val || !isNaN(Number(val)), "Must be a number"),
   currency: z.enum(CURRENCY_CODES).optional().nullable(),
+  secondaryCurrency: z.enum(CURRENCY_CODES).optional().nullable(),
+  secondaryBalance: z
+    .string()
+    .optional()
+    .nullable()
+    .refine((val) => !val || !isNaN(Number(val)), "Must be a number"),
+  secondaryCreditLimit: z
+    .string()
+    .optional()
+    .nullable()
+    .refine((val) => !val || !isNaN(Number(val)), "Must be a number"),
   isDefault: z.boolean(),
 });
 
@@ -82,6 +93,13 @@ export const transactionSchema = z
     categoryId: z.string().uuid("Select a category"),
     amount: z.string().refine((val) => Number(val) > 0, "Amount must be greater than 0"),
     fee: z.string(),
+    currency: z.enum(CURRENCY_CODES).optional().nullable(),
+    toCurrency: z.enum(CURRENCY_CODES).optional().nullable(),
+    amountReceived: z
+      .string()
+      .optional()
+      .nullable()
+      .refine((val) => !val || Number(val) > 0, "Must be greater than 0"),
     type: z.enum(["income", "expense", "transfer"]),
     description: z.string(),
     date: z.string().min(1, "Date is required"),

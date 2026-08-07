@@ -57,6 +57,13 @@
       "when": 1786027663386,
       "tag": "0007_petite_speed_demon",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786099497225,
+      "tag": "0008_narrow_human_torch",
+      "breakpoints": true
     }
   ]
 }

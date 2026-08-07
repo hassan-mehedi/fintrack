@@ -23,6 +23,8 @@ interface RecentTransaction {
   categoryIcon: string;
   categoryColor: string;
   accountName: string;
+  currency?: string | null;
+  accountCurrency?: string | null;
 }
 
 interface RecentTransactionsProps {
@@ -75,11 +77,11 @@ export const RecentTransactions = memo(function RecentTransactions({
                     }`}
                   >
                     {txn.type === "income" ? "+" : "-"}
-                    {formatCurrency(txn.amount)}
+                    {formatCurrency(txn.amount, false, txn.currency ?? txn.accountCurrency)}
                   </span>
                   {txn.fee > 0 && (
                     <Badge variant="secondary" className="text-xs">
-                      Fee: {formatCurrency(txn.fee)}
+                      Fee: {formatCurrency(txn.fee, false, txn.currency ?? txn.accountCurrency)}
                     </Badge>
                   )}
                 </div>

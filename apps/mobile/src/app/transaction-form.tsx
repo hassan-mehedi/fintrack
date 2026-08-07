@@ -15,6 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { apiFetch } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { errorFeedback, successFeedback } from '@/lib/haptics';
 import { useTheme } from '@/hooks/use-theme';
 import type { Account, Category, TransactionRow } from '@/lib/types';
@@ -42,7 +43,13 @@ export default function TransactionFormScreen() {
   const [categoryId, setCategoryId] = useState<string | null>(prefill?.categoryId ?? null);
   const [date, setDate] = useState(prefill?.date ?? format(new Date(), 'yyyy-MM-dd'));
   const [description, setDescription] = useState(prefill?.description ?? '');
+  const [currency, setCurrency] = useState<string | null>(prefill?.currency ?? null);
+  const [toCurrency, setToCurrency] = useState<string | null>(prefill?.toCurrency ?? null);
+  const [amountReceived, setAmountReceived] = useState(prefill?.amountReceived ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const { user } = useAuth();
+  const baseCurrency = user?.currency ?? 'BDT';
 
   const { data: accounts } = useQuery({
     queryKey: ['accounts'],
@@ -57,6 +64,20 @@ export default function TransactionFormScreen() {
     value: a.id,
     label: `${a.icon ?? ''} ${a.name}`.trim(),
   }));
+
+  const sourceAccount = (accounts ?? []).find((a) => a.id === accountId);
+  const destAccount = (accounts ?? []).find((a) => a.id === toAccountId);
+  const primaryCurrencyOf = (account?: Account) => account?.currency ?? baseCurrency;
+  const sideOptions = (account?: Account) =>
+    account?.secondaryCurrency
+      ? [primaryCurrencyOf(account), account.secondaryCurrency].map((code) => ({
+          value: code,
+          label: code,
+        }))
+      : null;
+  const sourceEffective = currency ?? primaryCurrencyOf(sourceAccount);
+  const destEffective = toCurrency ?? primaryCurrencyOf(destAccount);
+  const isCrossCurrency = type === 'transfer' && !!destAccount && sourceEffective !== destEffective;
   const categoryOptions = (categories ?? [])
     .filter((c) => (type === 'transfer' ? true : c.type === type || c.type === 'both'))
     .map((c) => ({ value: c.id, label: `${c.icon} ${c.name}` }));
@@ -100,6 +121,12 @@ export default function TransactionFormScreen() {
   });
 
   function handleSave() {
+    if (isCrossCurrency && !Number(amountReceived || 0)) {
+      setErrors({
+        amountReceived: `Converts ${sourceEffective} to ${destEffective} — enter the amount received`,
+      });
+      return;
+    }
     const body = {
       type,
       amount,
@@ -109,6 +136,10 @@ export default function TransactionFormScreen() {
       categoryId,
       date,
       description,
+      currency: currency === primaryCurrencyOf(sourceAccount) ? null : currency,
+      toCurrency:
+        type === 'transfer' && toCurrency !== primaryCurrencyOf(destAccount) ? toCurrency : null,
+      amountReceived: isCrossCurrency ? amountReceived : null,
       tags: [],
     };
 
@@ -157,7 +188,7 @@ export default function TransactionFormScreen() {
           />
 
           <TextField
-            label="Amount"
+            label={`Amount (${sourceEffective})`}
             placeholder="0.00"
             keyboardType="decimal-pad"
             value={amount}
@@ -170,9 +201,25 @@ export default function TransactionFormScreen() {
             placeholder="Select an account"
             options={accountOptions}
             value={accountId}
-            onChange={setAccountId}
+            onChange={(next) => {
+              setAccountId(next);
+              setCurrency(null);
+            }}
             error={errors.accountId}
           />
+
+          {sideOptions(sourceAccount) && (
+            <SelectField
+              label="Currency side"
+              placeholder={primaryCurrencyOf(sourceAccount)}
+              options={sideOptions(sourceAccount)!}
+              value={currency ?? primaryCurrencyOf(sourceAccount)}
+              onChange={(next) =>
+                setCurrency(next === primaryCurrencyOf(sourceAccount) ? null : next)
+              }
+              error={errors.currency}
+            />
+          )}
 
           {type === 'transfer' && (
             <SelectField
@@ -180,9 +227,44 @@ export default function TransactionFormScreen() {
               placeholder="Select destination account"
               options={accountOptions.filter((option) => option.value !== accountId)}
               value={toAccountId}
-              onChange={setToAccountId}
+              onChange={(next) => {
+                setToAccountId(next);
+                setToCurrency(null);
+              }}
               error={errors.toAccountId}
             />
+          )}
+
+          {type === 'transfer' && sideOptions(destAccount) && (
+            <SelectField
+              label="Destination side"
+              placeholder={primaryCurrencyOf(destAccount)}
+              options={sideOptions(destAccount)!}
+              value={toCurrency ?? primaryCurrencyOf(destAccount)}
+              onChange={(next) =>
+                setToCurrency(next === primaryCurrencyOf(destAccount) ? null : next)
+              }
+              error={errors.toCurrency}
+            />
+          )}
+
+          {isCrossCurrency && (
+            <>
+              <TextField
+                label={`Amount received (${destEffective})`}
+                placeholder="0.00"
+                keyboardType="decimal-pad"
+                value={amountReceived ?? ''}
+                onChangeText={setAmountReceived}
+                error={errors.amountReceived}
+              />
+              {Number(amount) > 0 && Number(amountReceived) > 0 && (
+                <ThemedText type="tiny" themeColor="textSecondary">
+                  Rate: 1 {destEffective} = {(Number(amount) / Number(amountReceived)).toFixed(2)}{' '}
+                  {sourceEffective}
+                </ThemedText>
+              )}
+            </>
           )}
 
           <SelectField

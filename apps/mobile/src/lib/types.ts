@@ -114,6 +114,10 @@ export interface TransactionRow {
   amount: number;
   fee: number;
   type: 'income' | 'expense' | 'transfer';
+  currency?: string | null;
+  toCurrency?: string | null;
+  amountReceived?: string | null;
+  accountCurrency?: string | null;
   description: string;
   date: string;
   categoryId?: string;
@@ -180,5 +184,8 @@ export interface Account {
   currency: string | null;
   creditLimit: string | null;
   defaultFeeRate: string | null;
+  secondaryCurrency: string | null;
+  secondaryBalance: string | null;
+  secondaryCreditLimit: string | null;
   isDefault: boolean;
 }

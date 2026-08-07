@@ -183,13 +183,36 @@ export default function DashboardScreen() {
                     </ThemedText>
                   </View>
                 </View>
-                {data.totalSavings > 0 && (
-                  <ThemedText type="tiny" themeColor="textSecondary">
-                    Spendable {formatMoney(data.spendableBalance, currency)} · locked in
-                    FDR/DPS {formatMoney(data.totalSavings, currency)}
-                  </ThemedText>
-                )}
               </ThemedView>
+
+              <View style={styles.row}>
+                <ThemedView type="backgroundElement" style={[styles.card, card, styles.half]}>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Expendable
+                  </ThemedText>
+                  <ThemedText
+                    type="defaultBold"
+                    themeColor="success"
+                    adjustsFontSizeToFit
+                    numberOfLines={1}>
+                    {formatMoney(data.spendableBalance, currency)}
+                  </ThemedText>
+                  <ThemedText type="tiny" themeColor="textSecondary">
+                    Bank, mobile & cash
+                  </ThemedText>
+                </ThemedView>
+                <ThemedView type="backgroundElement" style={[styles.card, card, styles.half]}>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Non-spendable
+                  </ThemedText>
+                  <ThemedText type="defaultBold" adjustsFontSizeToFit numberOfLines={1}>
+                    {formatMoney(data.totalSavings, currency)}
+                  </ThemedText>
+                  <ThemedText type="tiny" themeColor="textSecondary">
+                    Locked in FDR/DPS
+                  </ThemedText>
+                </ThemedView>
+              </View>
 
               <View style={styles.row}>
                 <ThemedView type="backgroundElement" style={[styles.card, card, styles.half]}>
@@ -342,6 +365,27 @@ export default function DashboardScreen() {
                                 Math.max(Number(account.creditLimit) - Number(account.balance), 0),
                                 account.currency ?? currency
                               )}
+                            </ThemedText>
+                          )}
+                          {account.secondaryCurrency && (
+                            <ThemedText type="tiny" themeColor="textSecondary" numberOfLines={1}>
+                              {account.secondaryCurrency}:{' '}
+                              {formatMoney(
+                                Number(account.secondaryBalance ?? 0),
+                                account.secondaryCurrency
+                              )}{' '}
+                              owed
+                              {account.secondaryCreditLimit &&
+                              Number(account.secondaryCreditLimit) > 0
+                                ? ` · avail ${formatMoney(
+                                    Math.max(
+                                      Number(account.secondaryCreditLimit) -
+                                        Number(account.secondaryBalance ?? 0),
+                                      0
+                                    ),
+                                    account.secondaryCurrency
+                                  )}`
+                                : ''}
                             </ThemedText>
                           )}
                         </ThemedView>

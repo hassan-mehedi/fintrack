@@ -26,10 +26,14 @@ function lastMonthKeys(count: number, end: Date) {
     return keys;
 }
 
+// Secondary-side (foreign currency) transactions are stamped with a
+// currency and can't be summed with base-currency flows, so every
+// aggregate here sticks to primary-side rows
 function expenseInRange(userId: string, from: string, to: string) {
     return and(
         eq(transactions.userId, userId),
         eq(transactions.type, "expense"),
+        isNull(transactions.currency),
         gte(transactions.date, from),
         lte(transactions.date, to)
     );
@@ -46,6 +50,7 @@ async function totalsForRange(userId: string, from: string, to: string) {
         .where(
             and(
                 eq(transactions.userId, userId),
+                isNull(transactions.currency),
                 gte(transactions.date, from),
                 lte(transactions.date, to)
             )
@@ -168,6 +173,7 @@ async function savingsFlowsByMonth(userId: string, from: string) {
                 and(
                     eq(transactions.userId, userId),
                     eq(transactions.type, "transfer"),
+                    isNull(transactions.currency),
                     inArray(financialAccounts.type, savingsTypes),
                     gte(transactions.date, from)
                 )
@@ -188,6 +194,7 @@ async function savingsFlowsByMonth(userId: string, from: string) {
             .where(
                 and(
                     eq(transactions.userId, userId),
+                    isNull(transactions.currency),
                     inArray(financialAccounts.type, savingsTypes),
                     gte(transactions.date, from)
                 )
@@ -532,6 +539,7 @@ export async function getYearOverview(userId: string, year: number) {
             .where(
                 and(
                     eq(transactions.userId, userId),
+                    isNull(transactions.currency),
                     gte(transactions.date, from),
                     lte(transactions.date, to)
                 )
@@ -590,6 +598,7 @@ export async function getSubscriptionCandidates(userId: string) {
                 eq(transactions.userId, userId),
                 eq(transactions.type, "expense"),
                 isNull(transactions.recurringId),
+                isNull(transactions.currency),
                 sql`${transactions.description} <> ''`,
                 gte(transactions.date, start)
             )

@@ -47,17 +47,20 @@ export const SummaryCards = memo(function SummaryCards({
         icon: Wallet,
         className: netWorth >= 0 ? "text-primary" : "text-rose-500",
       },
-      ...(hasSavings
-        ? [
-            {
-              title: "Spendable Balance",
-              value: formatCurrency(spendableBalance),
-              hint: "Assets minus money locked in FDR/DPS",
-              icon: Wallet,
-              className: "text-emerald-500",
-            },
-          ]
-        : []),
+      {
+        title: "Expendable Money",
+        value: formatCurrency(spendableBalance),
+        hint: "Bank, mobile banking and cash — money you can spend now",
+        icon: Wallet,
+        className: "text-emerald-500",
+      },
+      {
+        title: "Non-spendable Savings",
+        value: formatCurrency(totalSavings),
+        hint: "Locked in FDR/DPS — counted in net worth",
+        icon: PiggyBank,
+        className: "text-sky-500",
+      },
       {
         title: "Total Assets",
         value: formatCurrency(totalAssets),
@@ -90,13 +93,6 @@ export const SummaryCards = memo(function SummaryCards({
       },
       ...(hasSavings
         ? [
-            {
-              title: "Locked Savings",
-              value: formatCurrency(totalSavings),
-              hint: "FDR/DPS — counted in net worth, not spendable",
-              icon: PiggyBank,
-              className: "text-emerald-500",
-            },
             {
               title: "Saved This Month",
               value: formatCurrency(monthlySavings),

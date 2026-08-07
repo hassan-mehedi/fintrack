@@ -79,6 +79,22 @@ export default function AccountsScreen() {
                       )}
                     </ThemedText>
                   )}
+                  {item.secondaryCurrency && (
+                    <ThemedText type="tiny" themeColor="textSecondary">
+                      {formatMoney(Number(item.secondaryBalance ?? 0), item.secondaryCurrency)}{' '}
+                      owed
+                      {item.secondaryCreditLimit && Number(item.secondaryCreditLimit) > 0
+                        ? ` · avail ${formatMoney(
+                            Math.max(
+                              Number(item.secondaryCreditLimit) -
+                                Number(item.secondaryBalance ?? 0),
+                              0
+                            ),
+                            item.secondaryCurrency
+                          )}`
+                        : ''}
+                    </ThemedText>
+                  )}
                 </View>
               </ThemedView>
             </Pressable>

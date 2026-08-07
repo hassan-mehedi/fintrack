@@ -59,6 +59,13 @@ export default function AccountFormScreen() {
   const [accountCurrency, setAccountCurrency] = useState<string | null>(
     prefill?.currency ?? user?.currency ?? 'BDT'
   );
+  const [secondaryCurrency, setSecondaryCurrency] = useState<string | null>(
+    prefill?.secondaryCurrency ?? null
+  );
+  const [secondaryBalance, setSecondaryBalance] = useState(prefill?.secondaryBalance ?? '');
+  const [secondaryCreditLimit, setSecondaryCreditLimit] = useState(
+    prefill?.secondaryCreditLimit ?? ''
+  );
   const [isDefault, setIsDefault] = useState(prefill?.isDefault ?? false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -89,6 +96,9 @@ export default function AccountFormScreen() {
       defaultFeeRate: prefill?.defaultFeeRate ?? undefined,
       creditLimit: creditLimit || null,
       currency: accountCurrency,
+      secondaryCurrency: secondaryCurrency,
+      secondaryBalance: secondaryCurrency ? secondaryBalance || '0' : null,
+      secondaryCreditLimit: secondaryCurrency ? secondaryCreditLimit || null : null,
       isDefault,
     };
 
@@ -157,6 +167,38 @@ export default function AccountFormScreen() {
             onChange={setAccountCurrency}
             error={errors.currency}
           />
+
+          {(type === 'credit_card' || type === 'loan') && (
+            <SelectField
+              label="Second currency (optional)"
+              placeholder="None — single currency"
+              options={CURRENCY_OPTIONS.filter((c) => c.value !== accountCurrency)}
+              value={secondaryCurrency}
+              onChange={setSecondaryCurrency}
+              error={errors.secondaryCurrency}
+            />
+          )}
+
+          {(type === 'credit_card' || type === 'loan') && secondaryCurrency && (
+            <>
+              <TextField
+                label={`Amount owed (${secondaryCurrency})`}
+                placeholder="0.00"
+                keyboardType="decimal-pad"
+                value={secondaryBalance ?? ''}
+                onChangeText={setSecondaryBalance}
+                error={errors.secondaryBalance}
+              />
+              <TextField
+                label={`Credit limit (${secondaryCurrency})`}
+                placeholder="0.00"
+                keyboardType="decimal-pad"
+                value={secondaryCreditLimit ?? ''}
+                onChangeText={setSecondaryCreditLimit}
+                error={errors.secondaryCreditLimit}
+              />
+            </>
+          )}
 
           <TextField label="Icon" placeholder="Emoji" value={icon ?? ''} onChangeText={setIcon} />
 

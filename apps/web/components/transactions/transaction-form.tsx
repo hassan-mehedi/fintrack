@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { Loader2, X } from "lucide-react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { useCurrency } from "@/components/providers/currency-provider";
 import type { FinancialAccount, Category } from "@fintrack/shared/types";
 
 interface TransactionForEdit {
@@ -47,6 +48,9 @@ interface TransactionForEdit {
   categoryId: string;
   toAccountId: string | null;
   tags: string[];
+  currency?: string | null;
+  toCurrency?: string | null;
+  amountReceived?: string | null;
 }
 
 interface TransactionFormProps {
@@ -66,6 +70,7 @@ export function TransactionForm({
 }: TransactionFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const isEditing = !!transaction;
+  const baseCurrency = useCurrency();
 
   const form = useForm<TransactionInput>({
     resolver: zodResolver(transactionSchema),
@@ -79,6 +84,9 @@ export function TransactionForm({
       categoryId: "",
       toAccountId: null,
       tags: [],
+      currency: null,
+      toCurrency: null,
+      amountReceived: "",
     },
   });
 
@@ -95,6 +103,9 @@ export function TransactionForm({
         categoryId: transaction.categoryId,
         toAccountId: transaction.toAccountId,
         tags: transaction.tags || [],
+        currency: (transaction.currency ?? null) as TransactionInput["currency"],
+        toCurrency: (transaction.toCurrency ?? null) as TransactionInput["toCurrency"],
+        amountReceived: transaction.amountReceived ?? "",
       });
     } else if (open) {
       form.reset({
@@ -107,12 +118,36 @@ export function TransactionForm({
         categoryId: "",
         toAccountId: null,
         tags: [],
+        currency: null,
+        toCurrency: null,
+        amountReceived: "",
       });
     }
   }, [transaction, open]);
 
   const transactionType = form.watch("type");
   const selectedAccountId = form.watch("accountId");
+  const selectedToAccountId = form.watch("toAccountId");
+  const selectedCurrency = form.watch("currency");
+  const selectedToCurrency = form.watch("toCurrency");
+
+  const sourceAccount = accounts.find((a) => a.id === selectedAccountId);
+  const destAccount = accounts.find((a) => a.id === selectedToAccountId);
+  const primaryCurrencyOf = (account?: FinancialAccount) =>
+    account?.currency || baseCurrency;
+  const sourceEffectiveCurrency =
+    selectedCurrency || primaryCurrencyOf(sourceAccount);
+  const destEffectiveCurrency =
+    selectedToCurrency || primaryCurrencyOf(destAccount);
+  const isCrossCurrencyTransfer =
+    transactionType === "transfer" &&
+    !!destAccount &&
+    sourceEffectiveCurrency !== destEffectiveCurrency;
+
+  const sideOptions = (account?: FinancialAccount) =>
+    account?.secondaryCurrency
+      ? [primaryCurrencyOf(account), account.secondaryCurrency]
+      : null;
 
   // Filter categories based on transaction type
   const filteredCategories = categories.filter(
@@ -123,6 +158,7 @@ export function TransactionForm({
   const handleAccountChange = (accountId: string | null) => {
     if (!accountId) return;
     form.setValue("accountId", accountId);
+    form.setValue("currency", null);
     const account = accounts.find((a) => a.id === accountId);
     if (account?.defaultFeeRate && Number(account.defaultFeeRate) > 0) {
       const amount = Number(form.getValues("amount") || 0);
@@ -147,15 +183,14 @@ export function TransactionForm({
   };
 
   async function onSubmit(data: TransactionInput) {
-    if (data.type === "transfer" && data.toAccountId) {
-      const source = accounts.find((a) => a.id === data.accountId);
-      const dest = accounts.find((a) => a.id === data.toAccountId);
-      if ((source?.currency ?? null) !== (dest?.currency ?? null)) {
-        toast.error(
-          "These accounts use different currencies. Record the conversion as an expense on one side and an income on the other."
-        );
-        return;
-      }
+    if (isCrossCurrencyTransfer && !Number(data.amountReceived || 0)) {
+      toast.error(
+        `This transfer converts ${sourceEffectiveCurrency} to ${destEffectiveCurrency} — enter the amount received in ${destEffectiveCurrency}.`
+      );
+      return;
+    }
+    if (!isCrossCurrencyTransfer) {
+      data = { ...data, amountReceived: null };
     }
     setIsLoading(true);
     try {
@@ -228,7 +263,7 @@ export function TransactionForm({
               name="amount"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Amount</FormLabel>
+                  <FormLabel>Amount ({sourceEffectiveCurrency})</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -296,7 +331,10 @@ export function TransactionForm({
                       <FormLabel>To Account</FormLabel>
                       <Select
                         value={field.value || ""}
-                        onValueChange={field.onChange}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          form.setValue("toCurrency", null);
+                        }}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -362,6 +400,115 @@ export function TransactionForm({
                 />
               )}
             </div>
+
+            {/* Currency side pickers for dual-currency accounts */}
+            {(sideOptions(sourceAccount) ||
+              (transactionType === "transfer" && sideOptions(destAccount))) && (
+              <div className="grid grid-cols-2 gap-4">
+                {sideOptions(sourceAccount) && (
+                  <FormField
+                    control={form.control}
+                    name="currency"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Currency Side</FormLabel>
+                        <Select
+                          value={field.value || primaryCurrencyOf(sourceAccount)}
+                          onValueChange={(value) =>
+                            field.onChange(
+                              value === primaryCurrencyOf(sourceAccount) ? null : value
+                            )
+                          }
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {sideOptions(sourceAccount)!.map((code) => (
+                              <SelectItem key={code} value={code}>
+                                {code}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+                {transactionType === "transfer" && sideOptions(destAccount) && (
+                  <FormField
+                    control={form.control}
+                    name="toCurrency"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Destination Side</FormLabel>
+                        <Select
+                          value={field.value || primaryCurrencyOf(destAccount)}
+                          onValueChange={(value) =>
+                            field.onChange(
+                              value === primaryCurrencyOf(destAccount) ? null : value
+                            )
+                          }
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {sideOptions(destAccount)!.map((code) => (
+                              <SelectItem key={code} value={code}>
+                                {code}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Amount received for cross-currency transfers */}
+            {isCrossCurrencyTransfer && (
+              <FormField
+                control={form.control}
+                name="amountReceived"
+                render={({ field }) => {
+                  const sent = Number(form.watch("amount") || 0);
+                  const received = Number(field.value || 0);
+                  return (
+                    <FormItem>
+                      <FormLabel>
+                        Amount Received ({destEffectiveCurrency})
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          {...field}
+                          value={field.value || ""}
+                        />
+                      </FormControl>
+                      {sent > 0 && received > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Rate: 1 {destEffectiveCurrency} ={" "}
+                          {(sent / received).toFixed(2)} {sourceEffectiveCurrency}
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+            )}
 
             {/* Category for transfers too */}
             {transactionType === "transfer" && (

@@ -5,9 +5,9 @@ import {
     transactions,
     users,
 } from "@fintrack/db/schema";
-import { and, desc, eq, gte, inArray, lte, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, notInArray, sql } from "drizzle-orm";
 import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
-import { SAVINGS_ACCOUNT_TYPES } from "@fintrack/shared/types";
+import { LIQUID_ACCOUNT_TYPES, SAVINGS_ACCOUNT_TYPES } from "@fintrack/shared/types";
 import { getSpendingAnomalies } from "./analytics";
 import { isLiabilityAccount } from "./balance";
 import { recordNetWorthSnapshot } from "./net-worth";
@@ -55,6 +55,9 @@ export async function getDashboardData(
     const excludeForeign = foreignAccountIds.length
         ? notInArray(transactions.accountId, foreignAccountIds)
         : undefined;
+    // Transactions stamped with a currency hit an account's secondary
+    // (foreign) side, so they can't be summed with base-currency flows
+    const primarySideOnly = isNull(transactions.currency);
 
     const savingsTypes: string[] = [...SAVINGS_ACCOUNT_TYPES];
     const baseSavingsAccountIds = accounts
@@ -83,7 +86,8 @@ export async function getDashboardData(
                         eq(transactions.userId, userId),
                         gte(transactions.date, dateFrom),
                         lte(transactions.date, dateTo),
-                        excludeForeign
+                        excludeForeign,
+                        primarySideOnly
                     )
                 ),
 
@@ -103,7 +107,8 @@ export async function getDashboardData(
                         eq(transactions.type, "expense"),
                         gte(transactions.date, dateFrom),
                         lte(transactions.date, dateTo),
-                        excludeForeign
+                        excludeForeign,
+                        primarySideOnly
                     )
                 )
                 .groupBy(
@@ -126,7 +131,8 @@ export async function getDashboardData(
                         eq(transactions.type, "expense"),
                         gte(transactions.date, prevFrom),
                         lte(transactions.date, prevTo),
-                        excludeForeign
+                        excludeForeign,
+                        primarySideOnly
                     )
                 )
                 .groupBy(transactions.categoryId),
@@ -143,7 +149,8 @@ export async function getDashboardData(
                         eq(transactions.userId, userId),
                         gte(transactions.date, trendStart),
                         lte(transactions.date, dateTo),
-                        excludeForeign
+                        excludeForeign,
+                        primarySideOnly
                     )
                 )
                 .groupBy(sql`TO_CHAR(${transactions.date}::date, 'YYYY-MM')`)
@@ -155,6 +162,8 @@ export async function getDashboardData(
                     amount: transactions.amount,
                     fee: transactions.fee,
                     type: transactions.type,
+                    currency: transactions.currency,
+                    accountCurrency: financialAccounts.currency,
                     description: transactions.description,
                     date: transactions.date,
                     categoryName: categories.name,
@@ -219,9 +228,12 @@ export async function getDashboardData(
         .reduce((sum, acc) => sum + Number(acc.balance), 0);
     const monthlySavings = Number(savingsRows[0]?.total || 0);
 
-    // What the user can actually spend: liquid assets, excluding money
-    // locked away in FDR/DPS
-    const spendableBalance = totalAssets - totalSavings;
+    // What the user can actually spend right now: liquid accounts only
+    // (bank, mobile banking, cash) — FDR/DPS and credit are excluded
+    const liquidTypes: string[] = [...LIQUID_ACCOUNT_TYPES];
+    const spendableBalance = baseAccounts
+        .filter((acc) => liquidTypes.includes(acc.type))
+        .reduce((sum, acc) => sum + Number(acc.balance), 0);
 
     // Best-effort daily snapshot for the net worth history chart; ignore
     // failures (e.g. the snapshots migration not applied yet)

@@ -291,7 +291,7 @@ export default function TransactionsScreen() {
                         : 'text'
                   }>
                   {item.type === 'expense' ? '-' : item.type === 'income' ? '+' : ''}
-                  {formatMoney(item.amount, currency)}
+                  {formatMoney(item.amount, item.currency ?? item.accountCurrency ?? currency)}
                 </ThemedText>
               </ThemedView>
             </Pressable>

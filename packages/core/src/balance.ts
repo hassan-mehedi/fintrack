@@ -35,16 +35,21 @@ export function getBalanceDelta(
 /**
  * Returns { sourceDelta, destDelta } for transfers.
  *
- * Asset -> Asset: source -(amount+fee), dest +amount
- * Asset -> Liability: source -(amount+fee), dest -amount (paying off debt)
- * Liability -> Asset: source +(amount+fee), dest +amount (borrowing)
- * Liability -> Liability: source -(amount+fee), dest +amount (debt transfer)
+ * Asset -> Asset: source -(amount+fee), dest +received
+ * Asset -> Liability: source -(amount+fee), dest -received (paying off debt)
+ * Liability -> Asset: source +(amount+fee), dest +received (borrowing)
+ * Liability -> Liability: source -(amount+fee), dest +received (debt transfer)
+ *
+ * `receivedAmount` defaults to `amount`; it differs only for cross-currency
+ * transfers, where the source loses one currency and the destination gains
+ * another (fee is always in the source currency).
  */
 export function getTransferDeltas(
   sourceAccountType: string,
   destAccountType: string,
   amount: number,
-  fee: number
+  fee: number,
+  receivedAmount: number = amount
 ): { sourceDelta: number; destDelta: number } {
   const sourceIsLiability = isLiabilityAccount(sourceAccountType);
   const destIsLiability = isLiabilityAccount(destAccountType);
@@ -55,19 +60,19 @@ export function getTransferDeltas(
   if (!sourceIsLiability && !destIsLiability) {
     // Asset -> Asset
     sourceDelta = -(amount + fee);
-    destDelta = amount;
+    destDelta = receivedAmount;
   } else if (!sourceIsLiability && destIsLiability) {
     // Asset -> Liability (paying off debt)
     sourceDelta = -(amount + fee);
-    destDelta = -amount;
+    destDelta = -receivedAmount;
   } else if (sourceIsLiability && !destIsLiability) {
     // Liability -> Asset (borrowing)
     sourceDelta = amount + fee;
-    destDelta = amount;
+    destDelta = receivedAmount;
   } else {
     // Liability -> Liability (debt transfer)
     sourceDelta = -(amount + fee);
-    destDelta = amount;
+    destDelta = receivedAmount;
   }
 
   return { sourceDelta, destDelta };

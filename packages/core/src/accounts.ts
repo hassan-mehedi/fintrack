@@ -25,6 +25,9 @@ export async function createAccount(userId: string, data: unknown) {
             defaultFeeRate: parsed.defaultFeeRate || null,
             creditLimit: parsed.creditLimit || null,
             currency: parsed.currency || null,
+            secondaryCurrency: parsed.secondaryCurrency || null,
+            secondaryBalance: parsed.secondaryBalance || "0",
+            secondaryCreditLimit: parsed.secondaryCreditLimit || null,
             isDefault: parsed.isDefault,
         })
         .returning();
@@ -46,6 +49,9 @@ export async function updateAccount(userId: string, id: string, data: unknown) {
             defaultFeeRate: parsed.defaultFeeRate || null,
             creditLimit: parsed.creditLimit || null,
             currency: parsed.currency || null,
+            secondaryCurrency: parsed.secondaryCurrency || null,
+            secondaryBalance: parsed.secondaryBalance || "0",
+            secondaryCreditLimit: parsed.secondaryCreditLimit || null,
             isDefault: parsed.isDefault,
             updatedAt: new Date(),
         })

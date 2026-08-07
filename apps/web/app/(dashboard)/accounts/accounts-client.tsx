@@ -87,12 +87,16 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
       defaultFeeRate: "",
       creditLimit: "",
       currency: baseCurrency,
+      secondaryCurrency: null,
+      secondaryBalance: "",
+      secondaryCreditLimit: "",
       isDefault: false,
     },
   });
 
   const watchedType = form.watch("type");
   const showLiabilityFields = watchedType === "credit_card" || watchedType === "loan";
+  const watchedSecondaryCurrency = form.watch("secondaryCurrency");
 
   const onSubmit = async (data: FinancialAccountInput) => {
     setIsLoading(true);
@@ -365,6 +369,88 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                 )}
               </div>
 
+              {showLiabilityFields && (
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="secondaryCurrency"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>2nd Currency</FormLabel>
+                        <Select
+                          value={field.value || "none"}
+                          onValueChange={(value) =>
+                            field.onChange(value === "none" ? null : value)
+                          }
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            {SUPPORTED_CURRENCIES.map((c) => (
+                              <SelectItem key={c.code} value={c.code}>
+                                {c.code}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {watchedSecondaryCurrency && (
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="secondaryBalance"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              Owed ({watchedSecondaryCurrency})
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                {...field}
+                                value={field.value || ""}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="secondaryCreditLimit"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              Limit ({watchedSecondaryCurrency})
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                {...field}
+                                value={field.value || ""}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
+
               <FormField
                 control={form.control}
                 name="color"
@@ -406,6 +492,12 @@ function AccountCard({
   const balance = Number(account.balance);
   const creditLimit = account.creditLimit ? Number(account.creditLimit) : null;
   const formatCurrency = (amount: number) => format(amount, false, account.currency);
+  const secondaryBalance = Number(account.secondaryBalance || 0);
+  const secondaryLimit = account.secondaryCreditLimit
+    ? Number(account.secondaryCreditLimit)
+    : null;
+  const formatSecondary = (amount: number) =>
+    format(amount, false, account.secondaryCurrency);
 
   return (
     <Card className={isLiability ? "border-amber-500/30" : ""}>
@@ -469,6 +561,38 @@ function AccountCard({
                 }}
               />
             </div>
+          </div>
+        )}
+        {account.secondaryCurrency && (
+          <div className="mt-3 border-t pt-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">
+              {account.secondaryCurrency} side
+            </p>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-muted-foreground">Owed</span>
+              <span className="font-medium text-amber-500">
+                {formatSecondary(secondaryBalance)}
+              </span>
+            </div>
+            {secondaryLimit !== null && secondaryLimit > 0 && (
+              <>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-muted-foreground">Available credit</span>
+                  <span className="font-medium text-emerald-600">
+                    {formatSecondary(Math.max(secondaryLimit - secondaryBalance, 0))}{" "}
+                    / {formatSecondary(secondaryLimit)}
+                  </span>
+                </div>
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-amber-500"
+                    style={{
+                      width: `${Math.min((secondaryBalance / secondaryLimit) * 100, 100)}%`,
+                    }}
+                  />
+                </div>
+              </>
+            )}
           </div>
         )}
       </CardContent>
