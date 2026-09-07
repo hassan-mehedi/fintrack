@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createCategory, deleteCategory } from "@/lib/actions/categories";
+import {
+  createCategory,
+  deleteCategory,
+  updateCategory,
+} from "@/lib/actions/categories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +36,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { categorySchema, type CategoryInput } from "@fintrack/shared/validators";
 import type { Category } from "@fintrack/shared/types";
 import { toast } from "sonner";
-import { Plus, Trash2, Loader2 } from "lucide-react";
+import { Plus, Trash2, Loader2, Pencil } from "lucide-react";
 
 const CATEGORY_ICONS = [
   "🍔", "🚗", "🏠", "💡", "🎬", "🏥", "🛍️", "📚",
@@ -40,31 +44,77 @@ const CATEGORY_ICONS = [
   "🎁", "📌", "💸", "🎮", "✈️", "🐾", "🎵", "⚽",
 ];
 
+const CATEGORY_TYPE_LABELS: Record<Category["type"], string> = {
+  expense: "Expense",
+  income: "Income",
+  both: "Both",
+};
+
+const EMPTY_CATEGORY: CategoryInput = {
+  name: "",
+  icon: "📌",
+  color: "#6b7280",
+  type: "expense",
+};
+
+const SECTIONS: { type: Category["type"]; title: string }[] = [
+  { type: "expense", title: "Expense Categories" },
+  { type: "income", title: "Income Categories" },
+  { type: "both", title: "Income & Expense Categories" },
+];
+
 export function CategoriesClient({ categories }: { categories: Category[] }) {
   const router = useRouter();
   const [formOpen, setFormOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<CategoryInput>({
     resolver: zodResolver(categorySchema),
-    defaultValues: {
-      name: "",
-      icon: "📌",
-      color: "#6b7280",
-      type: "expense",
-    },
+    defaultValues: EMPTY_CATEGORY,
   });
+
+  useEffect(() => {
+    if (!formOpen) return;
+    form.reset(
+      editingCategory
+        ? {
+            name: editingCategory.name,
+            icon: editingCategory.icon,
+            color: editingCategory.color,
+            type: editingCategory.type,
+          }
+        : EMPTY_CATEGORY
+    );
+  }, [editingCategory, formOpen, form]);
+
+  const openCreate = () => {
+    setEditingCategory(null);
+    setFormOpen(true);
+  };
+
+  const openEdit = (category: Category) => {
+    setEditingCategory(category);
+    setFormOpen(true);
+  };
 
   const onSubmit = async (data: CategoryInput) => {
     setIsLoading(true);
     try {
-      await createCategory(data);
-      toast.success("Category created");
-      form.reset();
+      if (editingCategory) {
+        await updateCategory(editingCategory.id, data);
+        toast.success("Category updated");
+      } else {
+        await createCategory(data);
+        toast.success("Category created");
+      }
       setFormOpen(false);
+      setEditingCategory(null);
       router.refresh();
     } catch {
-      toast.error("Failed to create category");
+      toast.error(
+        editingCategory ? "Failed to update category" : "Failed to create category"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -80,108 +130,86 @@ export function CategoriesClient({ categories }: { categories: Category[] }) {
     }
   };
 
-  const expenseCategories = categories.filter(
-    (c) => c.type === "expense" || c.type === "both"
-  );
-  const incomeCategories = categories.filter(
-    (c) => c.type === "income" || c.type === "both"
-  );
+  const sections = SECTIONS.map((section) => ({
+    ...section,
+    items: categories.filter((c) => c.type === section.type),
+  })).filter((section) => section.items.length > 0);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Categories</h1>
           <p className="text-muted-foreground">
             Manage your transaction categories
           </p>
         </div>
-        <Button onClick={() => setFormOpen(true)}>
+        <Button onClick={openCreate}>
           <Plus className="mr-1 h-4 w-4" /> Add Category
         </Button>
       </div>
 
-      {/* Expense Categories */}
-      <div>
-        <h2 className="text-lg font-semibold mb-3">Expense Categories</h2>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {expenseCategories.map((cat) => (
-            <div
-              key={cat.id}
-              className="flex items-center justify-between rounded-lg border p-3"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-lg"
-                  style={{ backgroundColor: cat.color + "20" }}
-                >
-                  {cat.icon}
+      {sections.map((section) => (
+        <div key={section.type}>
+          <h2 className="text-lg font-semibold mb-3">{section.title}</h2>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {section.items.map((cat) => (
+              <div
+                key={cat.id}
+                className="flex items-center justify-between rounded-lg border p-3"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-lg"
+                    style={{ backgroundColor: cat.color + "20" }}
+                  >
+                    {cat.icon}
+                  </div>
+                  <span className="font-medium">{cat.name}</span>
+                  {cat.isDefault && (
+                    <Badge variant="secondary" className="text-xs">
+                      Default
+                    </Badge>
+                  )}
                 </div>
-                <span className="font-medium">{cat.name}</span>
-                {cat.isDefault && (
-                  <Badge variant="secondary" className="text-xs">
-                    Default
-                  </Badge>
-                )}
-              </div>
-              {!cat.isDefault && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDelete(cat.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Income Categories */}
-      <div>
-        <h2 className="text-lg font-semibold mb-3">Income Categories</h2>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {incomeCategories.map((cat) => (
-            <div
-              key={cat.id}
-              className="flex items-center justify-between rounded-lg border p-3"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-lg"
-                  style={{ backgroundColor: cat.color + "20" }}
-                >
-                  {cat.icon}
+                <div className="flex items-center">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground"
+                    onClick={() => openEdit(cat)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  {!cat.isDefault && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDelete(cat.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
-                <span className="font-medium">{cat.name}</span>
-                {cat.isDefault && (
-                  <Badge variant="secondary" className="text-xs">
-                    Default
-                  </Badge>
-                )}
               </div>
-              {!cat.isDefault && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDelete(cat.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      ))}
 
-      {/* Add Category Dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+      <Dialog
+        open={formOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+          if (!open) setEditingCategory(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Category</DialogTitle>
+            <DialogTitle>
+              {editingCategory ? "Edit Category" : "Add Category"}
+            </DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -199,7 +227,7 @@ export function CategoriesClient({ categories }: { categories: Category[] }) {
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="type"
@@ -209,6 +237,7 @@ export function CategoriesClient({ categories }: { categories: Category[] }) {
                       <Select
                         value={field.value}
                         onValueChange={field.onChange}
+                        items={CATEGORY_TYPE_LABELS}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -216,9 +245,11 @@ export function CategoriesClient({ categories }: { categories: Category[] }) {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="expense">Expense</SelectItem>
-                          <SelectItem value="income">Income</SelectItem>
-                          <SelectItem value="both">Both</SelectItem>
+                          {Object.entries(CATEGORY_TYPE_LABELS).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -228,27 +259,13 @@ export function CategoriesClient({ categories }: { categories: Category[] }) {
 
                 <FormField
                   control={form.control}
-                  name="icon"
+                  name="color"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Icon</FormLabel>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {CATEGORY_ICONS.map((icon) => (
-                            <SelectItem key={icon} value={icon}>
-                              {icon}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormLabel>Color</FormLabel>
+                      <FormControl>
+                        <Input type="color" className="h-10 w-20" {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -257,13 +274,31 @@ export function CategoriesClient({ categories }: { categories: Category[] }) {
 
               <FormField
                 control={form.control}
-                name="color"
+                name="icon"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Color</FormLabel>
+                    <FormLabel>Icon</FormLabel>
                     <FormControl>
-                      <Input type="color" className="h-10 w-20" {...field} />
+                      <Input
+                        placeholder="Any emoji"
+                        className="text-lg"
+                        {...field}
+                      />
                     </FormControl>
+                    <div className="flex flex-wrap gap-1">
+                      {CATEGORY_ICONS.map((icon) => (
+                        <button
+                          key={icon}
+                          type="button"
+                          onClick={() => field.onChange(icon)}
+                          className={`flex h-8 w-8 items-center justify-center rounded-md border text-lg transition-colors hover:bg-muted ${
+                            field.value === icon ? "border-primary bg-muted" : ""
+                          }`}
+                        >
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -273,7 +308,7 @@ export function CategoriesClient({ categories }: { categories: Category[] }) {
                 {isLoading && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Create Category
+                {editingCategory ? "Save Changes" : "Create Category"}
               </Button>
             </form>
           </Form>

@@ -49,7 +49,7 @@ export const CategorySparklines = memo(function CategorySparklines({
               const lastMonth = trend.months[trend.months.length - 1]?.month;
               return (
                 <div key={trend.categoryId} className="flex items-center gap-3">
-                  <span className="w-40 truncate text-sm">
+                  <span className="w-24 shrink-0 truncate text-sm sm:w-40">
                     {trend.categoryIcon} {trend.categoryName}
                   </span>
                   <div
@@ -73,7 +73,7 @@ export const CategorySparklines = memo(function CategorySparklines({
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  <span className="w-28 text-right text-sm font-medium">
+                  <span className="w-20 shrink-0 text-right text-sm font-medium sm:w-28">
                     {formatCurrency(latest, true)}
                     <span
                       className={`ml-1 text-xs ${

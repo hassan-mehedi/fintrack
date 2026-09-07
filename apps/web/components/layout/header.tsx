@@ -34,9 +34,9 @@ export function Header() {
         <Separator orientation="vertical" className="h-6" />
         <div className="flex-1" />
         <PwaInstallButton />
-        <Button size="sm" onClick={() => setFormOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Add Transaction
+        <Button size="sm" onClick={() => setFormOpen(true)} aria-label="Add transaction">
+          <Plus className="h-4 w-4 sm:mr-1" />
+          <span className="hidden sm:inline">Add Transaction</span>
         </Button>
         <ThemeToggle />
       </header>

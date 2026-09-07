@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -32,10 +33,12 @@ interface YearOverviewProps {
       averageMonthlyExpense: number;
     };
   };
+  action?: ReactNode;
 }
 
 export const YearOverviewChart = memo(function YearOverviewChart({
   overview,
+  action,
 }: YearOverviewProps) {
   const formatCurrency = useFormatCurrency();
   const chartData = useMemo(
@@ -59,6 +62,7 @@ export const YearOverviewChart = memo(function YearOverviewChart({
       <CardHeader>
         <CardTitle>{overview.year} Overview</CardTitle>
         <CardDescription>The whole year at a glance</CardDescription>
+        {action && <CardAction>{action}</CardAction>}
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-4">

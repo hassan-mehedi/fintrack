@@ -168,9 +168,9 @@ export function RecurringClient({
               key={rule.id}
               className={!rule.isActive ? "opacity-60" : undefined}
             >
-              <CardContent className="flex items-center gap-4 py-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+              <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-3 py-4 sm:flex-nowrap">
+                <div className="flex-1 min-w-0 basis-full sm:basis-auto">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
                     <span className="text-lg">{rule.categoryIcon}</span>
                     <span className="font-semibold truncate">
                       {rule.description}
@@ -209,7 +209,7 @@ export function RecurringClient({
                   </div>
                 </div>
 
-                <div className="text-right">
+                <div className="text-right mr-auto sm:mr-0">
                   <span
                     className={`text-lg font-bold ${
                       rule.type === "income"

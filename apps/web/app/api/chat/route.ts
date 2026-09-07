@@ -1,6 +1,6 @@
 import { handleChatStream } from "@mastra/ai-sdk";
 import { RequestContext } from "@mastra/core/request-context";
-import { createUIMessageStreamResponse } from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { mastra } from "@fintrack/ai/mastra";
 import { auth } from "@/lib/auth";
 import { db } from "@fintrack/db";
@@ -10,6 +10,23 @@ import { chatLimiter, isBodyTooLarge } from "@/lib/rate-limit";
 import { validateMessage } from "@fintrack/ai/guardrails";
 import { getCurrencyInfo } from "@fintrack/shared/currencies";
 import { logger } from "@/lib/logger";
+import { appendMessages } from "@fintrack/core/chat";
+
+function hasText(parts: unknown): boolean {
+  return (
+    Array.isArray(parts) &&
+    parts.some((p) => p.type === "text" && typeof p.text === "string" && p.text.trim())
+  );
+}
+
+async function persist(userId: string, role: "user" | "assistant", parts: unknown) {
+  if (!hasText(parts)) return;
+  try {
+    await appendMessages(userId, [{ role, parts }]);
+  } catch (err) {
+    logger.error({ path: "/api/chat", role, err }, "failed to persist chat message");
+  }
+}
 
 export async function POST(req: Request) {
   const start = Date.now();
@@ -71,6 +88,8 @@ export async function POST(req: Request) {
         return Response.json({ error: validation.error }, { status: 400 });
       }
     }
+
+    await persist(session.user.id, "user", lastUserMessage.parts);
   }
 
   const userCurrency = user.currency ?? "BDT";
@@ -87,7 +106,7 @@ export async function POST(req: Request) {
   };
   const messages = [currencySystemMessage, ...(params.messages ?? [])];
 
-  const stream = await handleChatStream({
+  const agentStream = await handleChatStream({
     mastra,
     agentId: "financialAgent",
     params: {
@@ -97,7 +116,16 @@ export async function POST(req: Request) {
     },
   });
 
+  const userId = session.user.id;
+  const stream = createUIMessageStream({
+    execute: ({ writer }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      writer.merge(agentStream as any);
+    },
+    onFinish: ({ responseMessage }) =>
+      persist(userId, "assistant", responseMessage.parts),
+  });
+
   logger.info({ method: "POST", path: "/api/chat", status: 200, duration: Date.now() - start }, "request completed");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createUIMessageStreamResponse({ stream: stream as any });
+  return createUIMessageStreamResponse({ stream });
 }

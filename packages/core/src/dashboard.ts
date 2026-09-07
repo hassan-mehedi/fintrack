@@ -42,7 +42,12 @@ export async function getDashboardData(
         db
             .select()
             .from(financialAccounts)
-            .where(eq(financialAccounts.userId, userId))
+            .where(
+                and(
+                    eq(financialAccounts.userId, userId),
+                    eq(financialAccounts.isArchived, false)
+                )
+            )
             .orderBy(desc(financialAccounts.isDefault)),
     ]);
 

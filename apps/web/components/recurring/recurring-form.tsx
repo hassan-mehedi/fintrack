@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -38,6 +38,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { FREQUENCY_LABELS } from "@fintrack/shared/types";
 import type { FinancialAccount, Category } from "@fintrack/shared/types";
 
 interface RecurringFormProps {
@@ -68,38 +69,70 @@ export function RecurringForm({
 }: RecurringFormProps) {
   const [isLoading, setIsLoading] = useState(false);
 
+  const emptyValues = (): RecurringTransactionInput => ({
+    type: "expense",
+    amount: "",
+    fee: "0",
+    description: "",
+    frequency: "monthly",
+    startDate: format(new Date(), "yyyy-MM-dd"),
+    endDate: "",
+    accountId: accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || "",
+    categoryId: "",
+  });
+
   const form = useForm<RecurringTransactionInput>({
     resolver: zodResolver(recurringTransactionSchema),
-    defaultValues: editData
-      ? {
-          accountId: editData.accountId,
-          categoryId: editData.categoryId,
-          amount: String(editData.amount),
-          fee: String(editData.fee),
-          type: editData.type,
-          description: editData.description,
-          frequency: editData.frequency,
-          startDate: editData.startDate,
-          endDate: editData.endDate || "",
-        }
-      : {
-          type: "expense",
-          amount: "",
-          fee: "0",
-          description: "",
-          frequency: "monthly",
-          startDate: format(new Date(), "yyyy-MM-dd"),
-          endDate: "",
-          accountId: accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || "",
-          categoryId: "",
-        },
+    defaultValues: emptyValues(),
   });
+
+  useEffect(() => {
+    if (!open) return;
+    if (editData) {
+      form.reset({
+        accountId: editData.accountId,
+        categoryId: editData.categoryId,
+        amount: String(editData.amount),
+        fee: String(editData.fee),
+        type: editData.type,
+        description: editData.description,
+        frequency: editData.frequency,
+        startDate: editData.startDate,
+        endDate: editData.endDate || "",
+      });
+    } else {
+      form.reset(emptyValues());
+    }
+  }, [open, editData]);
 
   const transactionType = form.watch("type");
   const selectedAccountId = form.watch("accountId");
 
-  const filteredCategories = categories.filter(
-    (cat) => cat.type === transactionType || cat.type === "both"
+  const accountItems = useMemo(
+    () =>
+      accounts.map((account) => ({
+        value: account.id,
+        label: (
+          <>
+            {account.icon} {account.name}
+          </>
+        ),
+      })),
+    [accounts]
+  );
+  const filteredCategoryItems = useMemo(
+    () =>
+      categories
+        .filter((cat) => cat.type === transactionType || cat.type === "both")
+        .map((cat) => ({
+          value: cat.id,
+          label: (
+            <>
+              {cat.icon} {cat.name}
+            </>
+          ),
+        })),
+    [categories, transactionType]
   );
 
   const handleAccountChange = (accountId: string | null) => {
@@ -227,7 +260,7 @@ export function RecurringForm({
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               {/* Account */}
               <FormField
                 control={form.control}
@@ -238,6 +271,7 @@ export function RecurringForm({
                     <Select
                       value={field.value}
                       onValueChange={handleAccountChange}
+                      items={accountItems}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -245,9 +279,9 @@ export function RecurringForm({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {accounts.map((account) => (
-                          <SelectItem key={account.id} value={account.id} label={`${account.icon} ${account.name}`}>
-                            {account.icon} {account.name}
+                        {accountItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -267,6 +301,7 @@ export function RecurringForm({
                     <Select
                       value={field.value}
                       onValueChange={field.onChange}
+                      items={filteredCategoryItems}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -274,9 +309,9 @@ export function RecurringForm({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {filteredCategories.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id} label={`${cat.icon} ${cat.name}`}>
-                            {cat.icon} {cat.name}
+                        {filteredCategoryItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -287,7 +322,7 @@ export function RecurringForm({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               {/* Frequency */}
               <FormField
                 control={form.control}
@@ -298,6 +333,7 @@ export function RecurringForm({
                     <Select
                       value={field.value}
                       onValueChange={field.onChange}
+                      items={FREQUENCY_LABELS}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -305,10 +341,11 @@ export function RecurringForm({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                        <SelectItem value="yearly">Yearly</SelectItem>
+                        {Object.entries(FREQUENCY_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -338,7 +375,7 @@ export function RecurringForm({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               {/* Start Date */}
               <FormField
                 control={form.control}

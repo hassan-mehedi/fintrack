@@ -11,9 +11,16 @@ export default function DashboardLoading() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[...Array(4)].map((_, i) => (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {[...Array(6)].map((_, i) => (
           <div key={i} className="h-[104px] rounded-lg border bg-card animate-pulse" />
+        ))}
+      </div>
+
+      {/* Stat Cards */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="h-[84px] rounded-lg border bg-card animate-pulse" />
         ))}
       </div>
 

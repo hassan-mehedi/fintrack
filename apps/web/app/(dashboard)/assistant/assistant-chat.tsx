@@ -1,20 +1,32 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Send, Bot, User, Loader2, Mic, Square, Languages } from "lucide-react";
+import { Send, Bot, User, Loader2, Mic, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { LIMITS } from "@/lib/rate-limit";
 import { validateMessage } from "@fintrack/ai/guardrails";
+import { clearChatHistory } from "@/lib/actions/chat";
 
 type VoiceLang = "en" | "bn";
 
@@ -174,11 +186,22 @@ function useWhisperRecording(
 
 // --- Main component ---
 
-export function AssistantChat({ voiceEnabled = true }: { voiceEnabled?: boolean }) {
+interface AssistantChatProps {
+  voiceEnabled?: boolean;
+  initialMessages?: UIMessage[];
+}
+
+export function AssistantChat({
+  voiceEnabled = true,
+  initialMessages = [],
+}: AssistantChatProps) {
   const [input, setInput] = useState("");
   const [voiceLang, setVoiceLang] = useState<VoiceLang>("en");
+  const [isClearing, setIsClearing] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, setMessages } = useChat({
+    messages: initialMessages,
     transport: new DefaultChatTransport({
       api: "/api/chat",
     }),
@@ -250,16 +273,63 @@ export function AssistantChat({ voiceEnabled = true }: { voiceEnabled?: boolean 
     sendMessage({ text: suggestion });
   };
 
+  const handleClear = async () => {
+    setIsClearing(true);
+    try {
+      await clearChatHistory();
+      setMessages([]);
+      setClearOpen(false);
+      toast.success("Chat cleared");
+    } catch {
+      toast.error("Failed to clear chat");
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   const charCount = input.length;
   const showCharCount = charCount > LIMITS.maxMessageLength * 0.7;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold">AI Assistant</h1>
-        <p className="text-sm text-muted-foreground">
-          Ask questions about your finances or create transactions and accounts.
-        </p>
+    <div className="flex h-[calc(100dvh-5.5rem)] md:h-[calc(100dvh-6.5rem)] flex-col">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold">AI Assistant</h1>
+          <p className="text-sm text-muted-foreground">
+            Ask questions about your finances or create transactions and accounts.
+          </p>
+        </div>
+        {messages.length > 0 && (
+          <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+            <AlertDialogTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={isBusy || isClearing}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Clear chat</span>
+                </Button>
+              }
+            />
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Clear chat history?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This removes every message in this conversation. It cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleClear} disabled={isClearing}>
+                  {isClearing ? "Clearing..." : "Clear"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       <Card className="flex flex-1 flex-col overflow-hidden">
@@ -390,8 +460,8 @@ export function AssistantChat({ voiceEnabled = true }: { voiceEnabled?: boolean 
 
         {/* Input area */}
         <div className="border-t">
-          <form onSubmit={handleSubmit} className="p-4 flex gap-2">
-            <div className="relative flex-1">
+          <form onSubmit={handleSubmit} className="p-3 sm:p-4 flex gap-2">
+            <div className="relative min-w-0 flex-1">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -425,12 +495,13 @@ export function AssistantChat({ voiceEnabled = true }: { voiceEnabled?: boolean 
                     render={
                       <Button
                         type="button"
+                        size="icon"
                         variant="outline"
                         onClick={toggleLang}
                         disabled={isRecording || isBusy}
-                        className="shrink-0 gap-1.5 px-2.5 text-xs font-semibold"
+                        className="shrink-0 text-xs font-semibold"
+                        aria-label={`Voice language: ${LANG_LABELS[voiceLang]}`}
                       >
-                        <Languages className="h-4 w-4" />
                         {LANG_LABELS[voiceLang]}
                       </Button>
                     }
@@ -472,6 +543,7 @@ export function AssistantChat({ voiceEnabled = true }: { voiceEnabled?: boolean 
             <Button
               type="submit"
               size="icon"
+              className="shrink-0"
               disabled={isBusy || !input.trim()}
             >
               <Send className="h-4 w-4" />

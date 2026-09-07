@@ -81,7 +81,7 @@ function AccountCard({
         )}
         {creditLimit !== null && creditLimit > 0 && (
           <div className="mt-2">
-            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+            <div className="flex flex-wrap justify-between gap-x-2 text-xs text-muted-foreground mb-1">
               <span>Available</span>
               <span>{formatCurrency(Math.max(creditLimit - balance, 0))} / {formatCurrency(creditLimit)}</span>
             </div>

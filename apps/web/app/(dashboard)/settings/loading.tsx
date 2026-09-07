@@ -8,6 +8,10 @@ export default function SettingsLoading() {
       <div className="grid gap-6 max-w-2xl">
         <div className="h-[120px] rounded-lg border bg-card animate-pulse" />
         <div className="h-[100px] rounded-lg border bg-card animate-pulse" />
+        <div className="h-[100px] rounded-lg border bg-card animate-pulse" />
+        <div className="h-[320px] rounded-lg border bg-card animate-pulse" />
+        <div className="h-[100px] rounded-lg border bg-card animate-pulse" />
+        <div className="h-[120px] rounded-lg border bg-card animate-pulse" />
       </div>
     </div>
   );

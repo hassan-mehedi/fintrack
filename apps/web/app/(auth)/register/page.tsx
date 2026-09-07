@@ -35,6 +35,11 @@ import {
 import { SUPPORTED_CURRENCIES } from "@fintrack/shared/currencies";
 import { Loader2 } from "lucide-react";
 
+const CURRENCY_ITEMS = SUPPORTED_CURRENCIES.map((c) => ({
+  value: c.code,
+  label: `${c.symbol} ${c.code} - ${c.name}`,
+}));
+
 export default function RegisterPage() {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -143,16 +148,16 @@ export default function RegisterPage() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Currency</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select items={CURRENCY_ITEMS} value={field.value} onValueChange={field.onChange}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select currency" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {SUPPORTED_CURRENCIES.map((c) => (
-                        <SelectItem key={c.code} value={c.code}>
-                          {c.symbol} {c.code} - {c.name}
+                      {CURRENCY_ITEMS.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          {c.label}
                         </SelectItem>
                       ))}
                     </SelectContent>

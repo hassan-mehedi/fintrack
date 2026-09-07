@@ -1,8 +1,10 @@
 "use client";
 
 import { memo, useMemo } from "react";
+import Link from "next/link";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -300,8 +302,10 @@ export const SubscriptionsCard = memo(function SubscriptionsCard({
 
 export const AnomaliesCard = memo(function AnomaliesCard({
   anomalies,
+  detailsHref,
 }: {
   anomalies: Anomaly[];
+  detailsHref?: string;
 }) {
   const formatCurrency = useFormatCurrency();
   if (anomalies.length === 0) return null;
@@ -315,6 +319,16 @@ export const AnomaliesCard = memo(function AnomaliesCard({
         <CardDescription>
           Far above the category&apos;s six-month average
         </CardDescription>
+        {detailsHref && (
+          <CardAction>
+            <Link
+              href={detailsHref}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              See details
+            </Link>
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="space-y-2">
         {anomalies.map((anomaly) => (

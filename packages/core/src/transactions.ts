@@ -428,3 +428,30 @@ export async function deleteTransaction(userId: string, id: string) {
 
     await db.batch(writes);
 }
+
+export async function deleteTransactions(userId: string, ids: string[]) {
+    for (const id of ids) {
+        await deleteTransaction(userId, id);
+    }
+}
+
+export async function updateTransactionsCategory(
+    userId: string,
+    ids: string[],
+    categoryId: string
+) {
+    if (ids.length === 0) return;
+
+    const [category] = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(and(eq(categories.id, categoryId), eq(categories.userId, userId)))
+        .limit(1);
+
+    if (!category) throw new NotFoundError("Category not found");
+
+    await db
+        .update(transactions)
+        .set({ categoryId, updatedAt: new Date() })
+        .where(and(inArray(transactions.id, ids), eq(transactions.userId, userId)));
+}

@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Popover,
   PopoverContent,
@@ -51,6 +52,7 @@ export function DateRangePicker() {
   });
   const [open, setOpen] = useState(false);
   const [calMonth, setCalMonth] = useState(currentFrom);
+  const isMobile = useIsMobile();
 
   const applyRange = (from: Date, to: Date) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -113,27 +115,25 @@ export function DateRangePicker() {
       </Button>
 
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-[160px] justify-start font-normal" />}>
+        <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-0 justify-start font-normal sm:min-w-[160px]" />}>
           <CalendarIcon className="mr-2 h-4 w-4" />
           {displayLabel}
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <div className="flex">
-            {/* Presets sidebar */}
-            <div className="border-r p-2 space-y-1">
+        <PopoverContent className="w-auto max-w-[calc(100vw-1rem)] p-0" align="start">
+          <div className="flex flex-col sm:flex-row">
+            <div className="flex gap-1 overflow-x-auto border-b p-2 sm:flex-col sm:space-y-1 sm:border-b-0 sm:border-r">
               {PRESETS.map((preset) => (
                 <Button
                   key={preset.label}
                   variant="ghost"
                   size="sm"
-                  className="w-full justify-start text-xs"
+                  className="shrink-0 justify-start text-xs sm:w-full"
                   onClick={() => handlePreset(preset)}
                 >
                   {preset.label}
                 </Button>
               ))}
             </div>
-            {/* Calendar */}
             <div className="p-2">
               <Calendar
                 mode="range"
@@ -141,7 +141,7 @@ export function DateRangePicker() {
                 onSelect={setRange}
                 month={calMonth}
                 onMonthChange={setCalMonth}
-                numberOfMonths={2}
+                numberOfMonths={isMobile ? 1 : 2}
               />
               <div className="flex justify-end gap-2 border-t p-2">
                 <Button variant="outline" size="sm" onClick={() => setOpen(false)}>

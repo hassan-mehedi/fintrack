@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { transactionSchema, type TransactionInput } from "@fintrack/shared/validators";
@@ -38,7 +38,7 @@ import { useCurrency } from "@/components/providers/currency-provider";
 import type { FinancialAccount, Category } from "@fintrack/shared/types";
 
 interface TransactionForEdit {
-  id: string;
+  id?: string;
   type: "income" | "expense" | "transfer";
   amount: number;
   fee: number;
@@ -61,6 +61,11 @@ interface TransactionFormProps {
   transaction?: TransactionForEdit | null;
 }
 
+function defaultAccountId(accounts: FinancialAccount[]) {
+  const active = accounts.filter((a) => !a.isArchived);
+  return active.find((a) => a.isDefault)?.id || active[0]?.id || "";
+}
+
 export function TransactionForm({
   open,
   onOpenChange,
@@ -69,7 +74,8 @@ export function TransactionForm({
   transaction,
 }: TransactionFormProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const isEditing = !!transaction;
+  const isEditing = !!transaction?.id;
+  const isDuplicating = !!transaction && !transaction.id;
   const baseCurrency = useCurrency();
 
   const form = useForm<TransactionInput>({
@@ -80,7 +86,7 @@ export function TransactionForm({
       fee: "0",
       description: "",
       date: format(new Date(), "yyyy-MM-dd"),
-      accountId: accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || "",
+      accountId: defaultAccountId(accounts),
       categoryId: "",
       toAccountId: null,
       tags: [],
@@ -114,7 +120,7 @@ export function TransactionForm({
         fee: "0",
         description: "",
         date: format(new Date(), "yyyy-MM-dd"),
-        accountId: accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || "",
+        accountId: defaultAccountId(accounts),
         categoryId: "",
         toAccountId: null,
         tags: [],
@@ -149,9 +155,49 @@ export function TransactionForm({
       ? [primaryCurrencyOf(account), account.secondaryCurrency]
       : null;
 
-  // Filter categories based on transaction type
-  const filteredCategories = categories.filter(
-    (cat) => cat.type === transactionType || cat.type === "both"
+  const accountItems = useMemo(
+    () =>
+      accounts
+        .filter(
+          (account) =>
+            !account.isArchived ||
+            account.id === transaction?.accountId ||
+            account.id === transaction?.toAccountId
+        )
+        .map((account) => ({
+          value: account.id,
+          label: (
+            <>
+              {account.icon} {account.name}
+              {account.isArchived ? " (archived)" : ""}
+            </>
+          ),
+        })),
+    [accounts, transaction?.accountId, transaction?.toAccountId]
+  );
+  const toAccountItems = useMemo(
+    () => accountItems.filter((item) => item.value !== selectedAccountId),
+    [accountItems, selectedAccountId]
+  );
+  const categoryItems = useMemo(
+    () =>
+      categories.map((cat) => ({
+        value: cat.id,
+        type: cat.type,
+        label: (
+          <>
+            {cat.icon} {cat.name}
+          </>
+        ),
+      })),
+    [categories]
+  );
+  const filteredCategoryItems = useMemo(
+    () =>
+      categoryItems.filter(
+        (item) => item.type === transactionType || item.type === "both"
+      ),
+    [categoryItems, transactionType]
   );
 
   // Auto-fill fee from account's default fee rate
@@ -194,7 +240,7 @@ export function TransactionForm({
     }
     setIsLoading(true);
     try {
-      if (isEditing) {
+      if (transaction?.id) {
         await updateTransaction(transaction.id, data);
         toast.success("Transaction updated successfully");
       } else {
@@ -214,7 +260,13 @@ export function TransactionForm({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Transaction" : "Add Transaction"}</DialogTitle>
+          <DialogTitle>
+            {isEditing
+              ? "Edit Transaction"
+              : isDuplicating
+              ? "Duplicate Transaction"
+              : "Add Transaction"}
+          </DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -280,7 +332,7 @@ export function TransactionForm({
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               {/* Account */}
               <FormField
                 control={form.control}
@@ -295,23 +347,17 @@ export function TransactionForm({
                     <Select
                       value={field.value}
                       onValueChange={handleAccountChange}
+                      items={accountItems}
                     >
                       <FormControl>
                         <SelectTrigger>
-                          {field.value ? (
-                            <span className="flex flex-1 text-left truncate">
-                              {accounts.find((a) => a.id === field.value)?.icon}{" "}
-                              {accounts.find((a) => a.id === field.value)?.name}
-                            </span>
-                          ) : (
-                            <SelectValue placeholder="Select account" />
-                          )}
+                          <SelectValue placeholder="Select account" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {accounts.map((account) => (
-                          <SelectItem key={account.id} value={account.id}>
-                            {account.icon} {account.name}
+                        {accountItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -335,27 +381,19 @@ export function TransactionForm({
                           field.onChange(value);
                           form.setValue("toCurrency", null);
                         }}
+                        items={toAccountItems}
                       >
                         <FormControl>
                           <SelectTrigger>
-                            {field.value ? (
-                              <span className="flex flex-1 text-left truncate">
-                                {accounts.find((a) => a.id === field.value)?.icon}{" "}
-                                {accounts.find((a) => a.id === field.value)?.name}
-                              </span>
-                            ) : (
-                              <SelectValue placeholder="Select account" />
-                            )}
+                            <SelectValue placeholder="Select account" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {accounts
-                            .filter((a) => a.id !== selectedAccountId)
-                            .map((account) => (
-                              <SelectItem key={account.id} value={account.id}>
-                                {account.icon} {account.name}
-                              </SelectItem>
-                            ))}
+                          {toAccountItems.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -373,23 +411,17 @@ export function TransactionForm({
                       <Select
                         value={field.value}
                         onValueChange={field.onChange}
+                        items={filteredCategoryItems}
                       >
                         <FormControl>
                           <SelectTrigger>
-                            {field.value ? (
-                              <span className="flex flex-1 text-left truncate">
-                                {filteredCategories.find((c) => c.id === field.value)?.icon}{" "}
-                                {filteredCategories.find((c) => c.id === field.value)?.name}
-                              </span>
-                            ) : (
-                              <SelectValue placeholder="Select category" />
-                            )}
+                            <SelectValue placeholder="Select category" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {filteredCategories.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.id}>
-                              {cat.icon} {cat.name}
+                          {filteredCategoryItems.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -404,7 +436,7 @@ export function TransactionForm({
             {/* Currency side pickers for dual-currency accounts */}
             {(sideOptions(sourceAccount) ||
               (transactionType === "transfer" && sideOptions(destAccount))) && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 {sideOptions(sourceAccount) && (
                   <FormField
                     control={form.control}
@@ -521,23 +553,17 @@ export function TransactionForm({
                     <Select
                       value={field.value}
                       onValueChange={field.onChange}
+                      items={categoryItems}
                     >
                       <FormControl>
                         <SelectTrigger>
-                          {field.value ? (
-                            <span className="flex flex-1 text-left truncate">
-                              {categories.find((c) => c.id === field.value)?.icon}{" "}
-                              {categories.find((c) => c.id === field.value)?.name}
-                            </span>
-                          ) : (
-                            <SelectValue placeholder="Select category" />
-                          )}
+                          <SelectValue placeholder="Select category" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {categories.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>
-                            {cat.icon} {cat.name}
+                        {categoryItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -548,7 +574,7 @@ export function TransactionForm({
               />
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               {/* Date */}
               <FormField
                 control={form.control}

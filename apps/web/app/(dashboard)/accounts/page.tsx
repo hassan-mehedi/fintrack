@@ -3,7 +3,9 @@ import type { FinancialAccount } from "@fintrack/shared/types";
 import { AccountsClient } from "./accounts-client";
 
 export default async function AccountsPage() {
-  const accounts = (await getAccounts()) as FinancialAccount[];
+  const accounts = (await getAccounts({
+    includeArchived: true,
+  })) as FinancialAccount[];
 
   return <AccountsClient accounts={accounts} />;
 }

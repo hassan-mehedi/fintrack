@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import type { getDashboardData } from "@/lib/actions/dashboard";
 import type {
@@ -25,6 +25,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   format,
   startOfMonth,
@@ -128,6 +135,8 @@ export function AnalyticsClient({
   subscriptions: Subscriptions;
 }) {
   const formatCurrency = useFormatCurrency();
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
@@ -135,6 +144,18 @@ export function AnalyticsClient({
   const dateFrom =
     fromParam || format(startOfMonth(new Date()), "yyyy-MM-dd");
   const dateTo = toParam || format(endOfMonth(new Date()), "yyyy-MM-dd");
+
+  const yearOptions = useMemo(() => {
+    const current = new Date().getFullYear();
+    return Array.from({ length: current - 2020 + 1 }, (_, i) => current - i);
+  }, []);
+
+  const selectYear = (value: string | null) => {
+    if (!value) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("year", value);
+    router.push(`${pathname}?${params.toString()}`);
+  };
 
   const savingsRate = useMemo(
     () =>
@@ -223,7 +244,7 @@ export function AnalyticsClient({
 
       {/* Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <SpendingChart data={data.spendingByCategory} />
+        <SpendingChart data={data.spendingByCategory} from={dateFrom} to={dateTo} />
         <TrendChart data={data.monthlyTrend} />
       </div>
 
@@ -242,7 +263,23 @@ export function AnalyticsClient({
 
       <SubscriptionsCard subscriptions={subscriptions} />
 
-      <YearOverviewChart overview={year} />
+      <YearOverviewChart
+        overview={year}
+        action={
+          <Select value={String(year.year)} onValueChange={selectYear}>
+            <SelectTrigger className="w-[100px]" aria-label="Year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      />
 
       {/* Top Spending Categories */}
       {data.spendingByCategory.length > 0 && (

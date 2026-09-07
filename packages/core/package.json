@@ -9,6 +9,7 @@
         "./balance": "./src/balance.ts",
         "./budgets": "./src/budgets.ts",
         "./categories": "./src/categories.ts",
+        "./chat": "./src/chat.ts",
         "./dashboard": "./src/dashboard.ts",
         "./errors": "./src/errors.ts",
         "./net-worth": "./src/net-worth.ts",

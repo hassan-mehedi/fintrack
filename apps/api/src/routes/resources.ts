@@ -48,16 +48,27 @@ const categoryQuery = z.object({
     type: z.enum(["income", "expense", "both"]).optional(),
 });
 
+const accountQuery = z.object({
+    includeArchived: z.coerce.boolean().optional(),
+});
+
 const currencyBody = z.object({ currency: z.string().min(3).max(3) });
 
 const toggleBody = z.object({ isActive: z.boolean() });
+
+const bulkIdsBody = z.object({ ids: z.array(z.string().uuid()).min(1).max(200) });
+
+const bulkCategoryBody = bulkIdsBody.extend({ categoryId: z.string().uuid() });
 
 export async function resourceRoutes(app: FastifyInstance) {
     app.addHook("preHandler", app.authenticate);
 
     const userId = (request: { user: { id: string } | null }) => request.user!.id;
 
-    app.get("/accounts", async (req) => accounts.getAccounts(userId(req)));
+    app.get("/accounts", async (req) => {
+        const { includeArchived } = accountQuery.parse(req.query);
+        return accounts.getAccounts(userId(req), { includeArchived });
+    });
     app.post("/accounts", async (req, reply) => {
         const account = await accounts.createAccount(userId(req), req.body);
         return reply.code(201).send(account);
@@ -65,6 +76,14 @@ export async function resourceRoutes(app: FastifyInstance) {
     app.put("/accounts/:id", async (req) => {
         const { id } = idParams.parse(req.params);
         return accounts.updateAccount(userId(req), id, req.body);
+    });
+    app.post("/accounts/:id/archive", async (req) => {
+        const { id } = idParams.parse(req.params);
+        return accounts.archiveAccount(userId(req), id);
+    });
+    app.post("/accounts/:id/unarchive", async (req) => {
+        const { id } = idParams.parse(req.params);
+        return accounts.unarchiveAccount(userId(req), id);
     });
     app.delete("/accounts/:id", async (req) => {
         const { id } = idParams.parse(req.params);
@@ -106,6 +125,16 @@ export async function resourceRoutes(app: FastifyInstance) {
         await transactions.deleteTransaction(userId(req), id);
         return { success: true };
     });
+    app.post("/transactions/bulk-delete", async (req) => {
+        const { ids } = bulkIdsBody.parse(req.body);
+        await transactions.deleteTransactions(userId(req), ids);
+        return { success: true, deleted: ids.length };
+    });
+    app.post("/transactions/bulk-category", async (req) => {
+        const { ids, categoryId } = bulkCategoryBody.parse(req.body);
+        await transactions.updateTransactionsCategory(userId(req), ids, categoryId);
+        return { success: true, updated: ids.length };
+    });
     app.get("/transactions/export", async (req, reply) => {
         const csv = await exporter.exportTransactionsCSV(
             userId(req),
@@ -124,6 +153,10 @@ export async function resourceRoutes(app: FastifyInstance) {
     app.post("/budgets", async (req, reply) => {
         const budget = await budgets.createBudget(userId(req), req.body);
         return reply.code(201).send(budget);
+    });
+    app.post("/budgets/copy-previous", async (req) => {
+        const { month, year } = budgetQuery.parse(req.body);
+        return budgets.copyBudgetsFromPreviousMonth(userId(req), month, year);
     });
     app.delete("/budgets/:id", async (req) => {
         const { id } = idParams.parse(req.params);

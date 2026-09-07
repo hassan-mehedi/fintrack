@@ -1,6 +1,6 @@
 export default function AssistantLoading() {
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
+    <div className="flex h-[calc(100dvh-5.5rem)] md:h-[calc(100dvh-6.5rem)] flex-col">
       <div className="mb-4">
         <div className="h-8 w-36 rounded bg-muted animate-pulse" />
         <div className="h-4 w-72 rounded bg-muted animate-pulse mt-2" />

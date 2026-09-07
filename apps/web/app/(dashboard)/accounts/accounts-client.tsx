@@ -1,10 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createAccount, deleteAccount } from "@/lib/actions/accounts";
+import {
+  archiveAccount,
+  createAccount,
+  deleteAccount,
+  unarchiveAccount,
+  updateAccount,
+} from "@/lib/actions/accounts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Card,
   CardContent,
@@ -19,8 +26,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -50,84 +68,174 @@ import { SUPPORTED_CURRENCIES } from "@fintrack/shared/currencies";
 import { isLiabilityAccount } from "@fintrack/core/balance";
 import type { FinancialAccount } from "@fintrack/shared/types";
 import { toast } from "sonner";
-import { Plus, MoreHorizontal, Trash2, Loader2 } from "lucide-react";
+import {
+  Plus,
+  MoreHorizontal,
+  Trash2,
+  Loader2,
+  Pencil,
+  Archive,
+  ArchiveRestore,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import {
   useCurrency,
   useFormatCurrency,
 } from "@/components/providers/currency-provider";
 
-const ACCOUNT_TYPES = [
-  { value: "bank", label: "Bank" },
-  { value: "mobile_banking", label: "Mobile Banking" },
-  { value: "cash", label: "Cash" },
-  { value: "credit_card", label: "Credit Card" },
-  { value: "loan", label: "Loan" },
-  { value: "custom", label: "Custom" },
-  { value: "fdr", label: "FDR (Fixed Deposit)" },
-  { value: "dps", label: "DPS (Deposit Scheme)" },
+const CURRENCY_ITEMS = SUPPORTED_CURRENCIES.map((c) => ({
+  value: c.code,
+  label: `${c.code} — ${c.name}`,
+}));
+
+const SECONDARY_CURRENCY_ITEMS = [
+  { value: "none", label: "None" },
+  ...SUPPORTED_CURRENCIES.map((c) => ({ value: c.code, label: c.code })),
 ];
 
 const ACCOUNT_ICONS = ["🏦", "📱", "💵", "💳", "🏧", "👛", "🪙", "💰"];
+
+function emptyAccountValues(baseCurrency: string): FinancialAccountInput {
+  return {
+    name: "",
+    type: "bank",
+    balance: "0",
+    icon: "🏦",
+    color: "#10b981",
+    defaultFeeRate: "",
+    creditLimit: "",
+    currency: baseCurrency as FinancialAccountInput["currency"],
+    secondaryCurrency: null,
+    secondaryBalance: "",
+    secondaryCreditLimit: "",
+    isDefault: false,
+  };
+}
+
+function accountToFormValues(
+  account: FinancialAccount,
+  baseCurrency: string
+): FinancialAccountInput {
+  return {
+    name: account.name,
+    type: account.type,
+    balance: account.balance,
+    icon: account.icon,
+    color: account.color,
+    defaultFeeRate: account.defaultFeeRate ?? "",
+    creditLimit: account.creditLimit ?? "",
+    currency: (account.currency ?? baseCurrency) as FinancialAccountInput["currency"],
+    secondaryCurrency:
+      (account.secondaryCurrency ?? null) as FinancialAccountInput["secondaryCurrency"],
+    secondaryBalance: account.secondaryBalance ?? "",
+    secondaryCreditLimit: account.secondaryCreditLimit ?? "",
+    isDefault: account.isDefault,
+  };
+}
 
 export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
   const router = useRouter();
   const baseCurrency = useCurrency();
   const formatCurrency = useFormatCurrency();
   const [formOpen, setFormOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<FinancialAccount | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FinancialAccount | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const form = useForm<FinancialAccountInput>({
     resolver: zodResolver(financialAccountSchema),
-    defaultValues: {
-      name: "",
-      type: "bank",
-      balance: "0",
-      icon: "🏦",
-      color: "#10b981",
-      defaultFeeRate: "",
-      creditLimit: "",
-      currency: baseCurrency,
-      secondaryCurrency: null,
-      secondaryBalance: "",
-      secondaryCreditLimit: "",
-      isDefault: false,
-    },
+    defaultValues: emptyAccountValues(baseCurrency),
   });
+
+  useEffect(() => {
+    if (!formOpen) return;
+    form.reset(
+      editingAccount
+        ? accountToFormValues(editingAccount, baseCurrency)
+        : emptyAccountValues(baseCurrency)
+    );
+  }, [editingAccount, formOpen, baseCurrency, form]);
 
   const watchedType = form.watch("type");
   const showLiabilityFields = watchedType === "credit_card" || watchedType === "loan";
   const watchedSecondaryCurrency = form.watch("secondaryCurrency");
 
+  const openCreate = () => {
+    setEditingAccount(null);
+    setFormOpen(true);
+  };
+
+  const openEdit = (account: FinancialAccount) => {
+    setEditingAccount(account);
+    setFormOpen(true);
+  };
+
   const onSubmit = async (data: FinancialAccountInput) => {
     setIsLoading(true);
     try {
-      await createAccount(data);
-      toast.success("Account created");
-      form.reset();
+      if (editingAccount) {
+        await updateAccount(editingAccount.id, data);
+        toast.success("Account updated");
+      } else {
+        await createAccount(data);
+        toast.success("Account created");
+      }
       setFormOpen(false);
+      setEditingAccount(null);
       router.refresh();
     } catch {
-      toast.error("Failed to create account");
+      toast.error(editingAccount ? "Failed to update account" : "Failed to create account");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleArchive = async () => {
+    if (!archiveTarget) return;
     try {
-      await deleteAccount(id);
+      await archiveAccount(archiveTarget.id);
+      toast.success("Account archived");
+      router.refresh();
+    } catch {
+      toast.error("Failed to archive account");
+    } finally {
+      setArchiveTarget(null);
+    }
+  };
+
+  const handleUnarchive = async (id: string) => {
+    try {
+      await unarchiveAccount(id);
+      toast.success("Account restored");
+      router.refresh();
+    } catch {
+      toast.error("Failed to restore account");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteAccount(deleteTarget.id);
       toast.success("Account deleted");
       router.refresh();
     } catch {
       toast.error("Failed to delete account");
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
-  const assetAccounts = accounts.filter((a) => !isLiabilityAccount(a.type));
-  const liabilityAccounts = accounts.filter((a) => isLiabilityAccount(a.type));
+  const activeAccounts = accounts.filter((a) => !a.isArchived);
+  const archivedAccounts = accounts.filter((a) => a.isArchived);
+  const assetAccounts = activeAccounts.filter((a) => !isLiabilityAccount(a.type));
+  const liabilityAccounts = activeAccounts.filter((a) => isLiabilityAccount(a.type));
   const inBaseCurrency = (a: FinancialAccount) =>
     !a.currency || a.currency === baseCurrency;
-  const hasForeignAccounts = accounts.some((a) => !inBaseCurrency(a));
+  const hasForeignAccounts = activeAccounts.some((a) => !inBaseCurrency(a));
   const totalAssets = assetAccounts
     .filter(inBaseCurrency)
     .reduce((sum, acc) => sum + Number(acc.balance), 0);
@@ -138,7 +246,7 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Accounts</h1>
           <p className="text-muted-foreground">
@@ -155,7 +263,7 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
             )}
           </p>
         </div>
-        <Button onClick={() => setFormOpen(true)}>
+        <Button onClick={openCreate}>
           <Plus className="mr-1 h-4 w-4" /> Add Account
         </Button>
       </div>
@@ -170,7 +278,8 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
               <AccountCard
                 key={account.id}
                 account={account}
-                onDelete={handleDelete}
+                onEdit={openEdit}
+                onArchive={setArchiveTarget}
               />
             ))}
           </div>
@@ -187,7 +296,8 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
               <AccountCard
                 key={account.id}
                 account={account}
-                onDelete={handleDelete}
+                onEdit={openEdit}
+                onArchive={setArchiveTarget}
                 isLiability
               />
             ))}
@@ -195,11 +305,47 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
         </div>
       )}
 
-      {/* Add Account Dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+      {archivedAccounts.length > 0 && (
+        <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => setShowArchived((v) => !v)}
+          >
+            {showArchived ? (
+              <ChevronUp className="mr-1 h-4 w-4" />
+            ) : (
+              <ChevronDown className="mr-1 h-4 w-4" />
+            )}
+            {showArchived ? "Hide" : "Show"} archived ({archivedAccounts.length})
+          </Button>
+          {showArchived && (
+            <div className="mt-3 grid gap-4 opacity-60 sm:grid-cols-2 lg:grid-cols-3">
+              {archivedAccounts.map((account) => (
+                <AccountCard
+                  key={account.id}
+                  account={account}
+                  isLiability={isLiabilityAccount(account.type)}
+                  onUnarchive={handleUnarchive}
+                  onDelete={setDeleteTarget}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <Dialog
+        open={formOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+          if (!open) setEditingAccount(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Account</DialogTitle>
+            <DialogTitle>{editingAccount ? "Edit Account" : "Add Account"}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -217,7 +363,7 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="type"
@@ -227,6 +373,7 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                       <Select
                         value={field.value}
                         onValueChange={field.onChange}
+                        items={ACCOUNT_TYPE_LABELS}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -234,9 +381,9 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {ACCOUNT_TYPES.map((t) => (
-                            <SelectItem key={t.value} value={t.value}>
-                              {t.label}
+                          {Object.entries(ACCOUNT_TYPE_LABELS).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -252,37 +399,45 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Icon</FormLabel>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {ACCOUNT_ICONS.map((icon) => (
-                            <SelectItem key={icon} value={icon}>
-                              {icon}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <Input
+                          placeholder="Any emoji"
+                          className="text-lg"
+                          {...field}
+                        />
+                      </FormControl>
+                      <div className="flex flex-wrap gap-1">
+                        {ACCOUNT_ICONS.map((icon) => (
+                          <button
+                            key={icon}
+                            type="button"
+                            onClick={() => field.onChange(icon)}
+                            className={`flex h-8 w-8 items-center justify-center rounded-md border text-lg transition-colors hover:bg-muted ${
+                              field.value === icon ? "border-primary bg-muted" : ""
+                            }`}
+                          >
+                            {icon}
+                          </button>
+                        ))}
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="balance"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        {showLiabilityFields ? "Current Amount Owed" : "Initial Balance"}
+                        {showLiabilityFields
+                          ? "Current Amount Owed"
+                          : editingAccount
+                          ? "Balance"
+                          : "Initial Balance"}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -317,7 +472,7 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="currency"
@@ -327,6 +482,7 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                       <Select
                         value={field.value || baseCurrency}
                         onValueChange={field.onChange}
+                        items={CURRENCY_ITEMS}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -334,9 +490,9 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {SUPPORTED_CURRENCIES.map((c) => (
-                            <SelectItem key={c.code} value={c.code}>
-                              {c.code} — {c.name}
+                          {CURRENCY_ITEMS.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -370,7 +526,7 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
               </div>
 
               {showLiabilityFields && (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid gap-4 sm:grid-cols-3">
                   <FormField
                     control={form.control}
                     name="secondaryCurrency"
@@ -382,6 +538,7 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                           onValueChange={(value) =>
                             field.onChange(value === "none" ? null : value)
                           }
+                          items={SECONDARY_CURRENCY_ITEMS}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -389,10 +546,9 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
-                            {SUPPORTED_CURRENCIES.map((c) => (
-                              <SelectItem key={c.code} value={c.code}>
-                                {c.code}
+                            {SECONDARY_CURRENCY_ITEMS.map((item) => (
+                              <SelectItem key={item.value} value={item.value}>
+                                {item.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -465,27 +621,98 @@ export function AccountsClient({ accounts }: { accounts: FinancialAccount[] }) {
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="isDefault"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel>Default account</FormLabel>
+                      <FormDescription>
+                        Preselected when adding a transaction
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Create Account
+                {editingAccount ? "Save Changes" : "Create Account"}
               </Button>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={archiveTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setArchiveTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive {archiveTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Its transactions stay in your history. The account disappears
+              from transaction forms and from your totals until you restore it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleArchive}>Archive</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleteTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the account and every transaction
+              recorded on it. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
 function AccountCard({
   account,
+  onEdit,
+  onArchive,
+  onUnarchive,
   onDelete,
   isLiability,
 }: {
   account: FinancialAccount;
-  onDelete: (id: string) => void;
+  onEdit?: (account: FinancialAccount) => void;
+  onArchive?: (account: FinancialAccount) => void;
+  onUnarchive?: (id: string) => void;
+  onDelete?: (account: FinancialAccount) => void;
   isLiability?: boolean;
 }) {
   const format = useFormatCurrency();
@@ -509,6 +736,7 @@ function AccountCard({
             <p className="text-xs text-muted-foreground">
               {ACCOUNT_TYPE_LABELS[account.type]}
               {account.currency ? ` · ${account.currency}` : ""}
+              {account.isDefault ? " · Default" : ""}
             </p>
           </div>
         </div>
@@ -517,13 +745,33 @@ function AccountCard({
               <MoreHorizontal className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => onDelete(account.id)}
-              className="text-destructive"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
+            {onEdit && (
+              <DropdownMenuItem onClick={() => onEdit(account)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+            )}
+            {onArchive && (
+              <DropdownMenuItem onClick={() => onArchive(account)}>
+                <Archive className="mr-2 h-4 w-4" />
+                Archive
+              </DropdownMenuItem>
+            )}
+            {onUnarchive && (
+              <DropdownMenuItem onClick={() => onUnarchive(account.id)}>
+                <ArchiveRestore className="mr-2 h-4 w-4" />
+                Unarchive
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem
+                onClick={() => onDelete(account)}
+                className="text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </CardHeader>

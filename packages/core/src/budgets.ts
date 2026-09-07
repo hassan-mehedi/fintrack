@@ -96,6 +96,57 @@ export async function createBudget(userId: string, data: unknown) {
     return budget;
 }
 
+export async function copyBudgetsFromPreviousMonth(
+    userId: string,
+    month: number,
+    year: number
+) {
+    const previousMonth = month === 1 ? 12 : month - 1;
+    const previousYear = month === 1 ? year - 1 : year;
+
+    const [previous, current] = await Promise.all([
+        db
+            .select({ categoryId: budgets.categoryId, amount: budgets.amount })
+            .from(budgets)
+            .where(
+                and(
+                    eq(budgets.userId, userId),
+                    eq(budgets.month, previousMonth),
+                    eq(budgets.year, previousYear)
+                )
+            ),
+        db
+            .select({ categoryId: budgets.categoryId })
+            .from(budgets)
+            .where(
+                and(
+                    eq(budgets.userId, userId),
+                    eq(budgets.month, month),
+                    eq(budgets.year, year)
+                )
+            ),
+    ]);
+
+    const alreadyBudgeted = new Set(current.map((b) => b.categoryId));
+    const toCopy = previous.filter((b) => !alreadyBudgeted.has(b.categoryId));
+
+    if (toCopy.length === 0) {
+        return { copied: 0 };
+    }
+
+    await db.insert(budgets).values(
+        toCopy.map((b) => ({
+            userId,
+            categoryId: b.categoryId,
+            amount: b.amount,
+            month,
+            year,
+        }))
+    );
+
+    return { copied: toCopy.length };
+}
+
 export async function deleteBudget(userId: string, id: string) {
     await db
         .delete(budgets)

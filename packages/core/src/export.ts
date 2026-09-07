@@ -9,6 +9,7 @@ import { and, desc, eq, gte, ilike, lte } from "drizzle-orm";
 export interface ExportFilters {
     type?: string;
     categoryId?: string;
+    accountId?: string;
     startDate?: string;
     endDate?: string;
     search?: string;
@@ -24,6 +25,9 @@ export async function exportTransactionsCSV(userId: string, filters?: ExportFilt
     }
     if (filters?.categoryId) {
         conditions.push(eq(transactions.categoryId, filters.categoryId));
+    }
+    if (filters?.accountId) {
+        conditions.push(eq(transactions.accountId, filters.accountId));
     }
     if (filters?.startDate) {
         conditions.push(gte(transactions.date, filters.startDate));

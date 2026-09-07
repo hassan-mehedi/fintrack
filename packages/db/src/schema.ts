@@ -159,6 +159,7 @@ export const financialAccounts = pgTable("financial_accounts", {
     scale: 2,
   }),
   isDefault: boolean("is_default").notNull().default(false),
+  isArchived: boolean("is_archived").notNull().default(false),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
 }, (table) => [
@@ -293,6 +294,34 @@ export const netWorthSnapshots = pgTable("net_worth_snapshots", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("net_worth_snapshots_user_date_idx").on(table.userId, table.date),
+]);
+
+// ── Assistant chat history ─────────────────────────────
+export const chatRoleEnum = pgEnum("chat_role", ["user", "assistant"]);
+
+export const chatConversations = pgTable("chat_conversations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  title: text("title"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => [
+  index("chat_conversations_user_updated_idx").on(table.userId, table.updatedAt.desc()),
+]);
+
+export const chatMessages = pgTable("chat_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  conversationId: uuid("conversation_id")
+    .notNull()
+    .references(() => chatConversations.id, { onDelete: "cascade" }),
+  role: chatRoleEnum("role").notNull(),
+  // AI SDK UIMessage parts, stored as sent so the client can replay them
+  parts: jsonb("parts").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => [
+  index("chat_messages_conversation_created_idx").on(table.conversationId, table.createdAt),
 ]);
 
 // ── Audit Logs ─────────────────────────────────────────

@@ -1,13 +1,13 @@
 import { db } from "@fintrack/db";
 import { subscriptionRequests } from "@fintrack/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 export async function getSubscriptionRequest(userId: string) {
     const [request] = await db
         .select()
         .from(subscriptionRequests)
         .where(eq(subscriptionRequests.userId, userId))
-        .orderBy(subscriptionRequests.createdAt)
+        .orderBy(desc(subscriptionRequests.createdAt))
         .limit(1);
 
     return request ?? null;
