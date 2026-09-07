@@ -150,6 +150,7 @@ This repo now includes a multi-stage `Dockerfile` for Dokploy or any other conta
 - Set your runtime environment variables in Dokploy:
   `DATABASE_URL`, `AUTH_SECRET`, `OPENAI_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, and optionally `NEXT_PUBLIC_SITE_URL`.
 - The Docker build caps the Node.js heap to `1024 MB` during `next build`, which is often more stable on smaller hosts.
+- The API container runs `drizzle-kit migrate` on start, so pending migrations in `packages/db/migrations` are applied before the server listens. The web container does not migrate; deploy the API first when a release adds a migration.
 
 If your Dokploy server still runs out of memory during image build, lower parallel load on the host or add temporary swap. The biggest memory consumer is still `next build`, but Dockerfile builds are usually easier to control than Nixpacks on a 2 GB machine.
 

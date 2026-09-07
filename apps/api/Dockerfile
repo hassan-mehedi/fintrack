@@ -19,4 +19,6 @@ COPY apps/api ./apps/api
 ENV PORT=4000
 EXPOSE 4000
 
-CMD ["npm", "run", "start", "-w", "apps/api"]
+# Runs pending Drizzle migrations against DATABASE_URL before the server starts.
+# Only this image migrates so the web and API deploys never race.
+CMD ["sh", "-c", "npm run db:migrate -w packages/db && npm run start -w apps/api"]
