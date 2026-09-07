@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { z } from "zod";
 import {
   recurringTransactionSchema,
   type RecurringTransactionInput,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/actions/recurring";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -36,10 +38,26 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { format } from "date-fns";
 import { FREQUENCY_LABELS } from "@fintrack/shared/types";
 import type { FinancialAccount, Category } from "@fintrack/shared/types";
+
+export const REMINDER_LABELS: Record<number, string> = {
+  0: "On the due day",
+  1: "1 day before",
+  3: "3 days before",
+  7: "7 days before",
+};
+
+const REMINDER_OFF = "off";
+
+type RecurringFormValues = z.input<typeof recurringTransactionSchema>;
+
+const reminderItems = [
+  { value: REMINDER_OFF, label: "Off" },
+  ...Object.entries(REMINDER_LABELS).map(([value, label]) => ({ value, label })),
+];
 
 interface RecurringFormProps {
   open: boolean;
@@ -57,6 +75,8 @@ interface RecurringFormProps {
     frequency: "daily" | "weekly" | "monthly" | "yearly";
     startDate: string;
     endDate: string | null;
+    tags: string[];
+    reminderDays: number | null;
   } | null;
 }
 
@@ -69,7 +89,7 @@ export function RecurringForm({
 }: RecurringFormProps) {
   const [isLoading, setIsLoading] = useState(false);
 
-  const emptyValues = (): RecurringTransactionInput => ({
+  const emptyValues = (): RecurringFormValues => ({
     type: "expense",
     amount: "",
     fee: "0",
@@ -79,9 +99,11 @@ export function RecurringForm({
     endDate: "",
     accountId: accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || "",
     categoryId: "",
+    tags: [],
+    reminderDays: null,
   });
 
-  const form = useForm<RecurringTransactionInput>({
+  const form = useForm<RecurringFormValues, unknown, RecurringTransactionInput>({
     resolver: zodResolver(recurringTransactionSchema),
     defaultValues: emptyValues(),
   });
@@ -99,6 +121,8 @@ export function RecurringForm({
         frequency: editData.frequency,
         startDate: editData.startDate,
         endDate: editData.endDate || "",
+        tags: editData.tags,
+        reminderDays: editData.reminderDays,
       });
     } else {
       form.reset(emptyValues());
@@ -410,6 +434,95 @@ export function RecurringForm({
                 )}
               />
             </div>
+
+            {/* Reminder */}
+            <FormField
+              control={form.control}
+              name="reminderDays"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reminder</FormLabel>
+                  <Select
+                    value={field.value == null ? REMINDER_OFF : String(field.value)}
+                    onValueChange={(value) =>
+                      field.onChange(
+                        value === null || value === REMINDER_OFF ? null : Number(value)
+                      )
+                    }
+                    items={reminderItems}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {reminderItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Tags */}
+            <FormField
+              control={form.control}
+              name="tags"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tags</FormLabel>
+                  <FormControl>
+                    <div>
+                      <Input
+                        placeholder="Type a tag and press Enter"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const input = e.currentTarget;
+                            const value = input.value.trim();
+                            const tags = field.value ?? [];
+                            if (value && !tags.includes(value)) {
+                              field.onChange([...tags, value]);
+                              input.value = "";
+                            }
+                          }
+                        }}
+                      />
+                      {(field.value ?? []).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {(field.value ?? []).map((tag) => (
+                            <Badge
+                              key={tag}
+                              variant="secondary"
+                              className="gap-1"
+                            >
+                              {tag}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  field.onChange(
+                                    (field.value ?? []).filter((t) => t !== tag)
+                                  )
+                                }
+                                className="hover:text-destructive"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

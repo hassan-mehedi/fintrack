@@ -6,7 +6,8 @@
     "exports": {
         "./validators": "./src/validators.ts",
         "./types": "./src/types.ts",
-        "./currencies": "./src/currencies.ts"
+        "./currencies": "./src/currencies.ts",
+        "./csv": "./src/csv.ts"
     },
     "dependencies": {
         "@fintrack/db": "*",

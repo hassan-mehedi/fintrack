@@ -45,6 +45,26 @@ export interface RecurringRule {
   startDate: string;
   endDate: string | null;
   lastProcessed: string | null;
+  isActive: boolean;
+  tags: string[];
+}
+
+export function getNextDueDate(rule: RecurringRule, today: Date): string | null {
+  if (!rule.isActive) return null;
+  const todayStr = format(today, "yyyy-MM-dd");
+  if (rule.endDate && todayStr > rule.endDate) return null;
+
+  let current = rule.lastProcessed
+    ? getNextDate(parseISO(rule.lastProcessed), rule.frequency)
+    : parseISO(rule.startDate);
+
+  while (format(current, "yyyy-MM-dd") < todayStr) {
+    current = getNextDate(current, rule.frequency);
+  }
+
+  const dueDate = format(current, "yyyy-MM-dd");
+  if (rule.endDate && dueDate > rule.endDate) return null;
+  return dueDate;
 }
 
 export interface DueOccurrence {
@@ -119,7 +139,7 @@ export async function processRecurringForUser(userId: string) {
         type: rule.type,
         description: rule.description,
         date: occurrence.date,
-        tags: [],
+        tags: rule.tags,
         recurringId: rule.id,
       });
 

@@ -2,14 +2,27 @@ import { db } from "@fintrack/db";
 import {
     categories,
     financialAccounts,
+    transactionSplits,
     transactions,
     users,
 } from "@fintrack/db/schema";
 import { transactionSchema } from "@fintrack/shared/validators";
-import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
+import {
+    and,
+    arrayOverlaps,
+    asc,
+    desc,
+    eq,
+    gte,
+    ilike,
+    inArray,
+    lte,
+    sql,
+} from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { getBalanceDelta, getTransferDeltas } from "./balance";
 import { NotFoundError, ValidationError } from "./errors";
+import { getSplitsForTransactions } from "./splits";
 
 type Batch = [BatchItem<"pg">, ...BatchItem<"pg">[]];
 
@@ -20,6 +33,8 @@ export interface TransactionFilters {
     startDate?: string;
     endDate?: string;
     search?: string;
+    // rows carrying at least one of these tags
+    tags?: string[];
     page?: number;
     limit?: number;
 }
@@ -81,7 +96,7 @@ function storedSide(meta: AccountMeta, storedCurrency: string | null): Side {
         : "primary";
 }
 
-function balanceUpdate(accountId: string, delta: number, side: Side = "primary") {
+export function balanceUpdate(accountId: string, delta: number, side: Side = "primary") {
     return db
         .update(financialAccounts)
         .set({
@@ -118,8 +133,21 @@ function filterConditions(userId: string, filters?: TransactionFilters) {
     if (filters?.search) {
         conditions.push(ilike(transactions.description, `%${filters.search}%`));
     }
+    if (filters?.tags?.length) {
+        conditions.push(arrayOverlaps(transactions.tags, filters.tags));
+    }
 
     return conditions;
+}
+
+export async function getUserTags(userId: string): Promise<string[]> {
+    const tag = sql<string>`unnest(${transactions.tags})`.as("tag");
+    const rows = await db
+        .selectDistinct({ tag })
+        .from(transactions)
+        .where(eq(transactions.userId, userId))
+        .orderBy(asc(sql`"tag"`));
+    return rows.map((r) => r.tag);
 }
 
 export async function getTransactions(userId: string, filters?: TransactionFilters) {
@@ -150,6 +178,9 @@ export async function getTransactions(userId: string, filters?: TransactionFilte
                 accountId: transactions.accountId,
                 accountName: financialAccounts.name,
                 toAccountId: transactions.toAccountId,
+                receiptKey: transactions.receiptKey,
+                receiptName: transactions.receiptName,
+                receiptMime: transactions.receiptMime,
                 createdAt: transactions.createdAt,
             })
             .from(transactions)
@@ -168,11 +199,14 @@ export async function getTransactions(userId: string, filters?: TransactionFilte
             .where(and(...conditions)),
     ]);
 
+    const splits = await getSplitsForTransactions(data.map((t) => t.id));
+
     return {
         transactions: data.map((t) => ({
             ...t,
             amount: Number(t.amount),
             fee: Number(t.fee),
+            splits: splits.get(t.id) ?? [],
         })),
         total: Number(countResult.count),
         page,
@@ -335,6 +369,14 @@ export async function updateTransaction(userId: string, id: string, data: unknow
         .returning();
 
     const writes: Batch = [updateTxn];
+
+    // Splits are tied to the old amount and only make sense on income/expense,
+    // so they are dropped here; the caller re-saves them when it still wants them
+    if (newAmount !== oldAmount || parsed.type === "transfer") {
+        writes.push(
+            db.delete(transactionSplits).where(eq(transactionSplits.transactionId, id))
+        );
+    }
 
     // Reverse old balance effects
     if (oldTxn.type === "income" || oldTxn.type === "expense") {

@@ -8,33 +8,13 @@ import {
 import { and, desc, eq, gte, inArray, isNull, lte, notInArray, sql } from "drizzle-orm";
 import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
 import { LIQUID_ACCOUNT_TYPES, SAVINGS_ACCOUNT_TYPES } from "@fintrack/shared/types";
-import { getSpendingAnomalies } from "./analytics";
+import { categorySpend, getSpendingAnomalies, type SpendingAnomaly } from "./analytics";
 import { isLiabilityAccount } from "./balance";
-import { recordNetWorthSnapshot } from "./net-worth";
 
-export async function getDashboardData(
-    userId: string,
-    options?: { from?: string; to?: string }
-) {
-    const now = new Date();
-    const dateFrom = options?.from || format(startOfMonth(now), "yyyy-MM-dd");
-    const dateTo = options?.to || format(endOfMonth(now), "yyyy-MM-dd");
-
-    // Monthly trend (last 6 months from the end of the range)
-    const rangeEnd = new Date(dateTo);
-    const sixMonthsAgo = new Date(rangeEnd);
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
-    const trendStart = format(startOfMonth(sixMonthsAgo), "yyyy-MM-dd");
-
-    // Previous calendar month relative to the range start, for category deltas
-    const prevMonth = subMonths(new Date(dateFrom), 1);
-    const prevFrom = format(startOfMonth(prevMonth), "yyyy-MM-dd");
-    const prevTo = format(endOfMonth(prevMonth), "yyyy-MM-dd");
-
-    // Accounts and the user's base currency come first: foreign-currency
-    // accounts can't be summed with base-currency ones, so their ids are
-    // needed to scope every aggregate below
-    const [[userRow], accounts] = await Promise.all([
+// Accounts and the user's base currency: foreign-currency accounts can't be
+// summed with base-currency ones, so every aggregate needs both
+async function loadAccounts(userId: string) {
+    const [[userRow], accounts] = await db.batch([
         db
             .select({ currency: users.currency })
             .from(users)
@@ -54,6 +34,61 @@ export async function getDashboardData(
     const baseCurrency = userRow?.currency ?? "BDT";
     const isBaseCurrency = (currency: string | null) =>
         !currency || currency === baseCurrency;
+
+    return { accounts, baseCurrency, isBaseCurrency };
+}
+
+type Accounts = Awaited<ReturnType<typeof loadAccounts>>;
+
+// Totals only make sense within one currency, so foreign-currency
+// accounts are left out and shown individually instead
+function summarizeNetWorth({ accounts, isBaseCurrency }: Accounts) {
+    const baseAccounts = accounts.filter((acc) => isBaseCurrency(acc.currency));
+
+    const totalAssets = baseAccounts
+        .filter((acc) => !isLiabilityAccount(acc.type))
+        .reduce((sum, acc) => sum + Number(acc.balance), 0);
+
+    const totalLiabilities = baseAccounts
+        .filter((acc) => isLiabilityAccount(acc.type))
+        .reduce((sum, acc) => sum + Number(acc.balance), 0);
+
+    return {
+        baseAccounts,
+        totalAssets,
+        totalLiabilities,
+        netWorth: totalAssets - totalLiabilities,
+    };
+}
+
+export async function computeNetWorth(userId: string) {
+    const { totalAssets, totalLiabilities, netWorth } = summarizeNetWorth(
+        await loadAccounts(userId)
+    );
+    return { totalAssets, totalLiabilities, netWorth };
+}
+
+export async function getDashboardData(
+    userId: string,
+    options?: { from?: string; to?: string; anomalies?: SpendingAnomaly[] }
+) {
+    const now = new Date();
+    const dateFrom = options?.from || format(startOfMonth(now), "yyyy-MM-dd");
+    const dateTo = options?.to || format(endOfMonth(now), "yyyy-MM-dd");
+
+    // Monthly trend (last 6 months from the end of the range)
+    const rangeEnd = new Date(dateTo);
+    const sixMonthsAgo = new Date(rangeEnd);
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+    const trendStart = format(startOfMonth(sixMonthsAgo), "yyyy-MM-dd");
+
+    // Previous calendar month relative to the range start, for category deltas
+    const prevMonth = subMonths(new Date(dateFrom), 1);
+    const prevFrom = format(startOfMonth(prevMonth), "yyyy-MM-dd");
+    const prevTo = format(endOfMonth(prevMonth), "yyyy-MM-dd");
+
+    const loaded = await loadAccounts(userId);
+    const { accounts, baseCurrency, isBaseCurrency } = loaded;
     const foreignAccountIds = accounts
         .filter((acc) => !isBaseCurrency(acc.currency))
         .map((acc) => acc.id);
@@ -68,6 +103,22 @@ export async function getDashboardData(
     const baseSavingsAccountIds = accounts
         .filter((acc) => savingsTypes.includes(acc.type) && isBaseCurrency(acc.currency))
         .map((acc) => acc.id);
+
+    // Per-category spend is split-aware: a split transaction is spread over
+    // its splits' categories (see categorySpend)
+    const expenseInRange = (from: string, to: string) =>
+        categorySpend(
+            and(
+                eq(transactions.userId, userId),
+                eq(transactions.type, "expense"),
+                gte(transactions.date, from),
+                lte(transactions.date, to),
+                excludeForeign,
+                primarySideOnly
+            )
+        );
+    const rangeSpend = expenseInRange(dateFrom, dateTo);
+    const previousSpend = expenseInRange(prevFrom, prevTo);
 
     // These queries are independent — run them in one parallel batch
     const [
@@ -98,49 +149,29 @@ export async function getDashboardData(
 
             db
                 .select({
-                    categoryId: transactions.categoryId,
+                    categoryId: rangeSpend.categoryId,
                     categoryName: categories.name,
                     categoryColor: categories.color,
                     categoryIcon: categories.icon,
-                    total: sql<string>`SUM(${transactions.amount}::numeric + ${transactions.fee}::numeric)`,
+                    total: sql<string>`SUM(${rangeSpend.amount})`,
                 })
-                .from(transactions)
-                .innerJoin(categories, eq(transactions.categoryId, categories.id))
-                .where(
-                    and(
-                        eq(transactions.userId, userId),
-                        eq(transactions.type, "expense"),
-                        gte(transactions.date, dateFrom),
-                        lte(transactions.date, dateTo),
-                        excludeForeign,
-                        primarySideOnly
-                    )
-                )
+                .from(rangeSpend)
+                .innerJoin(categories, eq(rangeSpend.categoryId, categories.id))
                 .groupBy(
-                    transactions.categoryId,
+                    rangeSpend.categoryId,
                     categories.name,
                     categories.color,
                     categories.icon
                 )
-                .orderBy(sql`SUM(${transactions.amount}::numeric + ${transactions.fee}::numeric) DESC`),
+                .orderBy(sql`SUM(${rangeSpend.amount}) DESC`),
 
             db
                 .select({
-                    categoryId: transactions.categoryId,
-                    total: sql<string>`SUM(${transactions.amount}::numeric + ${transactions.fee}::numeric)`,
+                    categoryId: previousSpend.categoryId,
+                    total: sql<string>`SUM(${previousSpend.amount})`,
                 })
-                .from(transactions)
-                .where(
-                    and(
-                        eq(transactions.userId, userId),
-                        eq(transactions.type, "expense"),
-                        gte(transactions.date, prevFrom),
-                        lte(transactions.date, prevTo),
-                        excludeForeign,
-                        primarySideOnly
-                    )
-                )
-                .groupBy(transactions.categoryId),
+                .from(previousSpend)
+                .groupBy(previousSpend.categoryId),
 
             db
                 .select({
@@ -209,24 +240,14 @@ export async function getDashboardData(
                       )
                 : Promise.resolve([{ total: "0" }]),
 
-            getSpendingAnomalies(userId, { from: dateFrom, to: dateTo }),
+            options?.anomalies ??
+                getSpendingAnomalies(userId, { from: dateFrom, to: dateTo }),
         ]);
 
     const rangeTotals = rangeTotalsRows[0];
 
-    // Totals only make sense within one currency, so foreign-currency
-    // accounts are left out and shown individually instead
-    const baseAccounts = accounts.filter((acc) => isBaseCurrency(acc.currency));
-
-    const totalAssets = baseAccounts
-        .filter((acc) => !isLiabilityAccount(acc.type))
-        .reduce((sum, acc) => sum + Number(acc.balance), 0);
-
-    const totalLiabilities = baseAccounts
-        .filter((acc) => isLiabilityAccount(acc.type))
-        .reduce((sum, acc) => sum + Number(acc.balance), 0);
-
-    const netWorth = totalAssets - totalLiabilities;
+    const { baseAccounts, totalAssets, totalLiabilities, netWorth } =
+        summarizeNetWorth(loaded);
 
     const totalSavings = baseAccounts
         .filter((acc) => savingsTypes.includes(acc.type))
@@ -239,18 +260,6 @@ export async function getDashboardData(
     const spendableBalance = baseAccounts
         .filter((acc) => liquidTypes.includes(acc.type))
         .reduce((sum, acc) => sum + Number(acc.balance), 0);
-
-    // Best-effort daily snapshot for the net worth history chart; ignore
-    // failures (e.g. the snapshots migration not applied yet)
-    try {
-        await recordNetWorthSnapshot(userId, {
-            netWorth,
-            totalAssets,
-            totalLiabilities,
-        });
-    } catch {
-        // dashboard data is still valid without the snapshot
-    }
 
     const previousTotals = new Map(
         previousSpending.map((s) => [s.categoryId, Number(s.total)])

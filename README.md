@@ -8,7 +8,11 @@ A personal finance tracker with an AI-powered assistant. Track income, expenses,
 - **Accounts** — Bank, mobile banking, cash, credit card, loan, and custom account types
 - **Transactions** — Income, expense, and transfer records with categories, tags, and fees
 - **Budgets** — Monthly spending limits per category with progress tracking
-- **Recurring Transactions** — Scheduled daily/weekly/monthly/yearly entries
+- **Recurring Transactions** — Scheduled daily/weekly/monthly/yearly entries with optional email reminders before each due date
+- **Savings Goals** — Target amount and deadline, tracked manually or from a linked account's balance
+- **Split Transactions** — One expense spread across several categories; budgets and analytics count each split under its own category
+- **CSV Import** — Bank statement import with column mapping, preview and duplicate skipping
+- **Receipts** — Attach an image or PDF to a transaction (S3-compatible storage such as Cloudflare R2)
 - **Analytics** — Detailed breakdowns by category and time period
 - **AI Assistant** — Chat-based assistant (Pro plan) that can read your financial data and create transactions/accounts via natural language. Supports voice input and Bangla-to-English translation.
 - **Multi-currency** — 16 supported currencies (BDT, USD, EUR, GBP, INR, and more)
@@ -55,10 +59,27 @@ OPENAI_API_KEY=
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
 
-# Resend (required for password reset emails)
+# Resend (required for password reset, budget alert and recurring reminder emails)
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=
 RESEND_REPLY_TO=
+
+# Receipt storage (optional; the receipt UI is hidden when unset). Any S3-compatible
+# bucket works; for Cloudflare R2 use the account endpoint and region "auto".
+RECEIPTS_S3_ENDPOINT=
+RECEIPTS_S3_BUCKET=
+RECEIPTS_S3_ACCESS_KEY_ID=
+RECEIPTS_S3_SECRET_ACCESS_KEY=
+RECEIPTS_S3_REGION=auto
+
+# Scheduled jobs (API container). Runs recurring transactions, budget alerts,
+# net worth snapshots and recurring reminders. All steps are idempotent.
+JOBS_ENABLED=true
+JOBS_INTERVAL_MINUTES=60
+JOBS_INITIAL_DELAY_SECONDS=30
+# Optional: enables POST /internal/jobs/run (API) and GET /api/cron/recurring (web)
+# with `Authorization: Bearer <CRON_SECRET>` to trigger a run by hand.
+CRON_SECRET=
 ```
 
 ### Setup
@@ -151,6 +172,7 @@ This repo now includes a multi-stage `Dockerfile` for Dokploy or any other conta
   `DATABASE_URL`, `AUTH_SECRET`, `OPENAI_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, and optionally `NEXT_PUBLIC_SITE_URL`.
 - The Docker build caps the Node.js heap to `1024 MB` during `next build`, which is often more stable on smaller hosts.
 - The API container runs `drizzle-kit migrate` on start, so pending migrations in `packages/db/migrations` are applied before the server listens. The web container does not migrate; deploy the API first when a release adds a migration.
+- The API container also runs the scheduled jobs (see `JOBS_*` above). Run one API replica, or set `JOBS_ENABLED=false` on all but one, so the jobs do not run twice per interval.
 
 If your Dokploy server still runs out of memory during image build, lower parallel load on the host or add temporary swap. The biggest memory consumer is still `next build`, but Dockerfile builds are usually easier to control than Nixpacks on a 2 GB machine.
 

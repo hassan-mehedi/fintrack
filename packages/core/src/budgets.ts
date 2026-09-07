@@ -3,13 +3,25 @@ import { budgets, categories, transactions } from "@fintrack/db/schema";
 import { budgetSchema } from "@fintrack/shared/validators";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { endOfMonth, format, startOfMonth } from "date-fns";
+import { categorySpend } from "./analytics";
 
 export async function getBudgets(userId: string, month: number, year: number) {
     const dateStart = format(startOfMonth(new Date(year, month - 1)), "yyyy-MM-dd");
     const dateEnd = format(endOfMonth(new Date(year, month - 1)), "yyyy-MM-dd");
 
+    // Spend is split-aware: a split transaction counts against its splits'
+    // categories, not its own (see categorySpend)
+    const spend = categorySpend(
+        and(
+            eq(transactions.userId, userId),
+            eq(transactions.type, "expense"),
+            gte(transactions.date, dateStart),
+            lte(transactions.date, dateEnd)
+        )
+    );
+
     // Budgets and spending are independent — fetch them together
-    const [budgetData, spending] = await Promise.all([
+    const [budgetData, spending] = await db.batch([
         db
             .select({
                 id: budgets.id,
@@ -33,19 +45,11 @@ export async function getBudgets(userId: string, month: number, year: number) {
 
         db
             .select({
-                categoryId: transactions.categoryId,
-                spent: sql<string>`SUM(${transactions.amount}::numeric + ${transactions.fee}::numeric)`,
+                categoryId: spend.categoryId,
+                spent: sql<string>`SUM(${spend.amount})`,
             })
-            .from(transactions)
-            .where(
-                and(
-                    eq(transactions.userId, userId),
-                    eq(transactions.type, "expense"),
-                    gte(transactions.date, dateStart),
-                    lte(transactions.date, dateEnd)
-                )
-            )
-            .groupBy(transactions.categoryId),
+            .from(spend)
+            .groupBy(spend.categoryId),
     ]);
 
     const spendingMap = new Map(spending.map((s) => [s.categoryId, Number(s.spent)]));

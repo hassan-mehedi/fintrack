@@ -213,6 +213,10 @@ export const transactions = pgTable("transactions", {
     .notNull()
     .default([]),
   recurringId: uuid("recurring_id"),
+  // object key in the receipt bucket; null when no receipt is attached
+  receiptKey: text("receipt_key"),
+  receiptName: text("receipt_name"),
+  receiptMime: text("receipt_mime"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
 }, (table) => [
@@ -221,6 +225,26 @@ export const transactions = pgTable("transactions", {
   index("transactions_user_category_type_date_idx").on(table.userId, table.categoryId, table.type, table.date),
   index("transactions_account_id_idx").on(table.accountId),
   index("transactions_category_id_idx").on(table.categoryId),
+  index("transactions_to_account_id_idx").on(table.toAccountId),
+  index("transactions_recurring_id_idx").on(table.recurringId),
+  index("transactions_tags_gin_idx").using("gin", table.tags),
+]);
+
+// ── Transaction splits (one transaction spread over several categories) ──
+export const transactionSplits = pgTable("transaction_splits", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  transactionId: uuid("transaction_id")
+    .notNull()
+    .references(() => transactions.id, { onDelete: "cascade" }),
+  categoryId: uuid("category_id")
+    .notNull()
+    .references(() => categories.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  note: text("note").notNull().default(""),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => [
+  index("transaction_splits_transaction_id_idx").on(table.transactionId),
+  index("transaction_splits_category_id_idx").on(table.categoryId),
 ]);
 
 // ── Budgets ────────────────────────────────────────────
@@ -274,6 +298,9 @@ export const recurringTransactions = pgTable("recurring_transactions", {
   endDate: date("end_date", { mode: "string" }),
   isActive: boolean("is_active").notNull().default(true),
   lastProcessed: date("last_processed", { mode: "string" }),
+  tags: text("tags").array().notNull().default([]),
+  // days before each due date to email a reminder; null means no reminder
+  reminderDays: integer("reminder_days"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 }, (table) => [
   index("recurring_transactions_user_active_idx").on(table.userId, table.isActive),
@@ -281,7 +308,45 @@ export const recurringTransactions = pgTable("recurring_transactions", {
   index("recurring_transactions_category_id_idx").on(table.categoryId),
 ]);
 
-// ── Net worth snapshots (one per user per day, upserted on dashboard load) ──
+// ── Recurring reminders (one row per rule per due date, so a reminder is sent once) ──
+export const recurringReminders = pgTable("recurring_reminders", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  recurringId: uuid("recurring_id")
+    .notNull()
+    .references(() => recurringTransactions.id, { onDelete: "cascade" }),
+  dueDate: date("due_date", { mode: "string" }).notNull(),
+  sentAt: timestamp("sent_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("recurring_reminders_rule_due_idx").on(table.recurringId, table.dueDate),
+]);
+
+// ── Savings goals ──────────────────────────────────────
+export const savingsGoals = pgTable("savings_goals", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  icon: text("icon").notNull().default("🎯"),
+  color: text("color").notNull().default("#10b981"),
+  targetAmount: decimal("target_amount", { precision: 12, scale: 2 }).notNull(),
+  // progress comes from this account's balance when set, else from savedAmount
+  accountId: uuid("account_id").references(() => financialAccounts.id, {
+    onDelete: "set null",
+  }),
+  savedAmount: decimal("saved_amount", { precision: 12, scale: 2 })
+    .notNull()
+    .default("0"),
+  deadline: date("deadline", { mode: "string" }),
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => [
+  index("savings_goals_user_id_idx").on(table.userId),
+  index("savings_goals_account_id_idx").on(table.accountId),
+]);
+
+// ── Net worth snapshots (one per user per day, written by the daily job) ──
 export const netWorthSnapshots = pgTable("net_worth_snapshots", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")

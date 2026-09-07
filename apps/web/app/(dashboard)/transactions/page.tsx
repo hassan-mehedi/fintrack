@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import { getTransactions } from "@/lib/actions/transactions";
+import { isStorageConfigured } from "@fintrack/core/storage";
+import { getTransactions, getUserTags } from "@/lib/actions/transactions";
 import { getAccounts } from "@/lib/actions/accounts";
 import { getCategories } from "@/lib/actions/categories";
 import type { FinancialAccount, Category } from "@fintrack/shared/types";
@@ -12,6 +13,7 @@ interface TransactionsSearchParams {
   categoryId?: string;
   accountId?: string;
   type?: string;
+  tags?: string;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,6 +25,14 @@ function asUuid(value?: string) {
 
 function asTransactionType(value?: string) {
   return TRANSACTION_TYPES.find((t) => t === value);
+}
+
+function asTagList(value?: string) {
+  const tags = value
+    ?.split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  return tags?.length ? tags : undefined;
 }
 
 export default async function TransactionsPage({
@@ -37,12 +47,14 @@ export default async function TransactionsPage({
     categoryId: asUuid(params.categoryId),
     accountId: asUuid(params.accountId),
     type: asTransactionType(params.type),
+    tags: asTagList(params.tags),
   };
 
-  const [accounts, categories, txns] = await Promise.all([
+  const [accounts, categories, txns, userTags] = await Promise.all([
     getAccounts({ includeArchived: true }),
     getCategories(),
     getTransactions({ page: 1, startDate: dateFrom, endDate: dateTo, ...filters }),
+    getUserTags(),
   ]);
 
   return (
@@ -54,6 +66,8 @@ export default async function TransactionsPage({
         initialFrom={dateFrom}
         initialTo={dateTo}
         initialFilters={filters}
+        initialUserTags={userTags}
+        receiptsEnabled={isStorageConfigured()}
       />
     </Suspense>
   );

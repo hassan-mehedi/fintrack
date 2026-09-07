@@ -4,7 +4,8 @@ import {
     financialAccounts,
     transactions,
 } from "@fintrack/db/schema";
-import { and, desc, eq, gte, ilike, lte } from "drizzle-orm";
+import { and, arrayOverlaps, desc, eq, gte, ilike, lte } from "drizzle-orm";
+import { getSplitsForTransactions } from "./splits";
 
 export interface ExportFilters {
     type?: string;
@@ -13,6 +14,11 @@ export interface ExportFilters {
     startDate?: string;
     endDate?: string;
     search?: string;
+    tags?: string[];
+}
+
+function csvCell(value: string) {
+    return `"${value.replace(/"/g, '""')}"`;
 }
 
 export async function exportTransactionsCSV(userId: string, filters?: ExportFilters) {
@@ -38,9 +44,13 @@ export async function exportTransactionsCSV(userId: string, filters?: ExportFilt
     if (filters?.search) {
         conditions.push(ilike(transactions.description, `%${filters.search}%`));
     }
+    if (filters?.tags?.length) {
+        conditions.push(arrayOverlaps(transactions.tags, filters.tags));
+    }
 
     const data = await db
         .select({
+            id: transactions.id,
             date: transactions.date,
             type: transactions.type,
             description: transactions.description,
@@ -59,16 +69,33 @@ export async function exportTransactionsCSV(userId: string, filters?: ExportFilt
         .where(and(...conditions))
         .orderBy(desc(transactions.date), desc(transactions.createdAt));
 
-    const headers = ["Date", "Type", "Description", "Category", "Account", "Amount", "Fee", "Tags"];
+    const splits = await getSplitsForTransactions(data.map((t) => t.id));
+
+    const headers = [
+        "Date",
+        "Type",
+        "Description",
+        "Category",
+        "Account",
+        "Amount",
+        "Fee",
+        "Tags",
+        "Splits",
+    ];
     const rows = data.map((t) => [
         t.date,
         t.type,
-        `"${(t.description || "").replace(/"/g, '""')}"`,
-        `"${t.categoryName}"`,
-        `"${t.accountName}"`,
+        csvCell(t.description || ""),
+        csvCell(t.categoryName),
+        csvCell(t.accountName),
         t.amount,
         t.fee,
-        `"${(t.tags || []).join(", ")}"`,
+        csvCell((t.tags || []).join(", ")),
+        csvCell(
+            (splits.get(t.id) ?? [])
+                .map((s) => `${s.category.name} ${s.amount}`)
+                .join("; ")
+        ),
     ]);
 
     return [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");

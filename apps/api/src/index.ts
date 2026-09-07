@@ -8,9 +8,12 @@ import { env } from "./env.js";
 import { authPlugin } from "./auth/plugin.js";
 import { authRoutes } from "./routes/auth.js";
 import { chatRoutes } from "./routes/chat.js";
+import { goalRoutes } from "./routes/goals.js";
 import { meRoutes } from "./routes/me.js";
 import { resourceRoutes } from "./routes/resources.js";
 import { transcribeRoutes } from "./routes/transcribe.js";
+import { jobsRoutes } from "./jobs/routes.js";
+import { startScheduler } from "./jobs/scheduler.js";
 
 const app = Fastify({ logger: true });
 
@@ -43,7 +46,12 @@ await app.register(authRoutes, { prefix: "/v1/auth" });
 await app.register(meRoutes, { prefix: "/v1" });
 await app.register(resourceRoutes, { prefix: "/v1" });
 await app.register(chatRoutes, { prefix: "/v1" });
+await app.register(goalRoutes, { prefix: "/v1" });
 await app.register(transcribeRoutes, { prefix: "/v1" });
+await app.register(jobsRoutes, { prefix: "/internal" });
+
+// Hooks must be added before listen; the first run waits for the initial delay
+startScheduler(app);
 
 try {
     await app.listen({ port: env.port, host: "0.0.0.0" });

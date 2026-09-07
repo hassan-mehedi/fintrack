@@ -137,6 +137,58 @@ export const recurringTransactionSchema = z.object({
   frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().optional().nullable(),
+  tags: z.array(z.string()).default([]),
+  // null or undefined means no reminder email
+  reminderDays: z.number().int().min(0).max(30).optional().nullable(),
+});
+
+// ── Transaction splits ─────────────────────────────────
+export const transactionSplitSchema = z.object({
+  categoryId: z.string().uuid("Select a category"),
+  amount: z.string().refine((val) => Number(val) > 0, "Amount must be greater than 0"),
+  note: z.string().max(200).default(""),
+});
+
+// The split amounts must add up to the parent transaction amount; core checks that.
+export const transactionSplitsSchema = z.object({
+  splits: z.array(transactionSplitSchema).max(20),
+});
+
+// ── Savings goal ───────────────────────────────────────
+export const savingsGoalSchema = z.object({
+  name: z.string().min(1, "Goal name is required").max(80),
+  icon: z.string(),
+  color: z.string(),
+  targetAmount: z.string().refine((val) => Number(val) > 0, "Target must be greater than 0"),
+  accountId: z.string().uuid().optional().nullable(),
+  savedAmount: z
+    .string()
+    .optional()
+    .nullable()
+    .refine((val) => !val || Number(val) >= 0, "Must be zero or more"),
+  deadline: z.string().optional().nullable(),
+});
+
+export const goalContributionSchema = z.object({
+  amount: z.string().refine((val) => Number(val) !== 0, "Amount must not be zero"),
+});
+
+// ── CSV import ─────────────────────────────────────────
+export const importTransactionRowSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+  amount: z.string().refine((val) => Number(val) > 0, "Amount must be greater than 0"),
+  type: z.enum(["income", "expense"]),
+  description: z.string().max(500).default(""),
+  // matched by name against the user's categories; created when missing
+  categoryName: z.string().max(80).optional().nullable(),
+  tags: z.array(z.string().max(40)).max(20).default([]),
+});
+
+export const importTransactionsSchema = z.object({
+  accountId: z.string().uuid("Select an account"),
+  rows: z.array(importTransactionRowSchema).min(1).max(2000),
+  // when true, a row whose date, amount, type and description already exist is skipped
+  skipDuplicates: z.boolean().default(true),
 });
 
 // Infer types
@@ -149,6 +201,12 @@ export type CategoryInput = z.infer<typeof categorySchema>;
 export type TransactionInput = z.infer<typeof transactionSchema>;
 export type BudgetInput = z.infer<typeof budgetSchema>;
 export type RecurringTransactionInput = z.infer<typeof recurringTransactionSchema>;
+export type TransactionSplitInput = z.infer<typeof transactionSplitSchema>;
+export type TransactionSplitsInput = z.infer<typeof transactionSplitsSchema>;
+export type SavingsGoalInput = z.infer<typeof savingsGoalSchema>;
+export type GoalContributionInput = z.infer<typeof goalContributionSchema>;
+export type ImportTransactionRow = z.infer<typeof importTransactionRowSchema>;
+export type ImportTransactionsInput = z.infer<typeof importTransactionsSchema>;
 
 export const changePasswordSchema = z
   .object({

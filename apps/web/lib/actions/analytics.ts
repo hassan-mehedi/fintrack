@@ -6,6 +6,7 @@ import { requireUserId } from "@/lib/action-session";
 export async function getMonthAnalytics(options?: {
     from?: string;
     to?: string;
+    anomalies?: analytics.SpendingAnomaly[];
 }) {
     const userId = await requireUserId();
     return analytics.getMonthAnalytics(userId, options);

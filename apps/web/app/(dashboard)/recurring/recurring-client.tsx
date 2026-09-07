@@ -27,11 +27,14 @@ import {
   Play,
   Loader2,
   RefreshCw,
+  Bell,
+  MailWarning,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { FinancialAccount, Category } from "@fintrack/shared/types";
 import { FREQUENCY_LABELS } from "@fintrack/shared/types";
 import { useFormatCurrency } from "@/components/providers/currency-provider";
+import { REMINDER_LABELS } from "@/components/recurring/recurring-form";
 
 type RecurringRule = Awaited<
   ReturnType<typeof import("@/lib/actions/recurring").getRecurringTransactions>
@@ -48,22 +51,28 @@ type RecurringEditData = {
   frequency: "daily" | "weekly" | "monthly" | "yearly";
   startDate: string;
   endDate: string | null;
+  tags: string[];
+  reminderDays: number | null;
 };
 
 export function RecurringClient({
   rules,
   accounts,
   categories,
+  emailConfigured,
 }: {
   rules: RecurringRule[];
   accounts: FinancialAccount[];
   categories: Category[];
+  emailConfigured: boolean;
 }) {
   const router = useRouter();
   const formatCurrency = useFormatCurrency();
   const [formOpen, setFormOpen] = useState(false);
   const [editData, setEditData] = useState<RecurringEditData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const remindersWithoutEmail =
+    !emailConfigured && rules.some((rule) => rule.reminderDays !== null);
 
   const handleDelete = async (id: string) => {
     try {
@@ -114,6 +123,8 @@ export function RecurringClient({
       frequency: rule.frequency,
       startDate: rule.startDate,
       endDate: rule.endDate,
+      tags: rule.tags,
+      reminderDays: rule.reminderDays,
     });
     setFormOpen(true);
   };
@@ -150,6 +161,13 @@ export function RecurringClient({
           </Button>
         </div>
       </div>
+
+      {remindersWithoutEmail && (
+        <p className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+          <MailWarning className="h-4 w-4 shrink-0" />
+          Reminders are on, but email is not configured, so none will be sent.
+        </p>
+      )}
 
       {rules.length === 0 ? (
         <Card>
@@ -206,7 +224,28 @@ export function RecurringClient({
                         {format(parseISO(rule.lastProcessed), "MMM d, yyyy")}
                       </span>
                     )}
+                    {rule.nextDueDate && (
+                      <span className="text-foreground">
+                        Next: {format(parseISO(rule.nextDueDate), "d MMM")}
+                      </span>
+                    )}
+                    {rule.reminderDays !== null && (
+                      <span className="inline-flex items-center gap-1">
+                        <Bell className="h-3.5 w-3.5" />
+                        {REMINDER_LABELS[rule.reminderDays] ??
+                          `${rule.reminderDays} days before`}
+                      </span>
+                    )}
                   </div>
+                  {rule.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {rule.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="text-right mr-auto sm:mr-0">

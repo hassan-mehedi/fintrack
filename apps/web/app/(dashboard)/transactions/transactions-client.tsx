@@ -11,6 +11,7 @@ import {
 } from "@/lib/actions/transactions";
 import { exportTransactionsCSV } from "@/lib/actions/export";
 import { TransactionForm } from "@/components/transactions/transaction-form";
+import { ImportDialog } from "@/components/transactions/import-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import {
   Plus,
@@ -57,6 +64,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Paperclip,
+  Split,
+  Tag,
+  Upload,
   X,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -81,6 +92,7 @@ interface InitialFilters {
   categoryId?: string;
   accountId?: string;
   type?: string;
+  tags?: string[];
 }
 
 interface TransactionsClientProps {
@@ -90,6 +102,33 @@ interface TransactionsClientProps {
   initialFrom: string;
   initialTo: string;
   initialFilters?: InitialFilters;
+  initialUserTags: string[];
+  receiptsEnabled: boolean;
+}
+
+interface ActiveFilters {
+  type?: string;
+  categoryId?: string;
+  accountId?: string;
+  startDate: string;
+  endDate: string;
+  search?: string;
+  tags?: string[];
+}
+
+// Identifies one page of results so the client can tell whether the server
+// already rendered exactly what it is about to ask for
+function queryKey(page: number, filters: ActiveFilters) {
+  return JSON.stringify([
+    page,
+    filters.type ?? "",
+    filters.categoryId ?? "",
+    filters.accountId ?? "",
+    filters.startDate,
+    filters.endDate,
+    filters.search ?? "",
+    filters.tags ?? [],
+  ]);
 }
 
 const TYPE_FILTERS = ["income", "expense", "transfer"];
@@ -114,6 +153,13 @@ function toFormValues(txn: TransactionRow): EditingTransaction {
     currency: txn.currency,
     toCurrency: txn.toCurrency,
     amountReceived: txn.amountReceived,
+    splits: txn.splits.map((s) => ({
+      categoryId: s.categoryId,
+      amount: s.amount,
+      note: s.note,
+    })),
+    receiptKey: txn.receiptKey,
+    receiptName: txn.receiptName,
   };
 }
 
@@ -124,6 +170,8 @@ export function TransactionsClient({
   initialFrom,
   initialTo,
   initialFilters,
+  initialUserTags,
+  receiptsEnabled,
 }: TransactionsClientProps) {
   const formatCurrency = useFormatCurrency();
   const searchParams = useSearchParams();
@@ -182,7 +230,9 @@ export function TransactionsClient({
   const [accountFilter, setAccountFilter] = useState<string>(
     initialFilters?.accountId || "all"
   );
+  const [tagFilter, setTagFilter] = useState<string[]>(initialFilters?.tags ?? []);
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] =
     useState<EditingTransaction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -206,7 +256,7 @@ export function TransactionsClient({
     };
   }, [search]);
 
-  const activeFilters = useMemo(
+  const activeFilters = useMemo<ActiveFilters>(
     () => ({
       type: typeFilter !== "all" ? typeFilter : undefined,
       categoryId: categoryFilter !== "all" ? categoryFilter : undefined,
@@ -214,33 +264,66 @@ export function TransactionsClient({
       startDate: dateFrom,
       endDate: dateTo,
       search: debouncedSearch || undefined,
+      tags: tagFilter.length > 0 ? tagFilter : undefined,
     }),
-    [typeFilter, categoryFilter, accountFilter, dateFrom, dateTo, debouncedSearch]
+    [typeFilter, categoryFilter, accountFilter, dateFrom, dateTo, debouncedSearch, tagFilter]
   );
 
+  const serverKey = useMemo(
+    () =>
+      queryKey(1, {
+        type: initialFilters?.type,
+        categoryId: initialFilters?.categoryId,
+        accountId: initialFilters?.accountId,
+        startDate: initialFrom,
+        endDate: initialTo,
+        tags: initialFilters?.tags,
+      }),
+    [initialFilters, initialFrom, initialTo]
+  );
+
+  const applyResult = useCallback((result: TransactionsResult) => {
+    setTransactions(result.transactions);
+    setTotal(result.total);
+    setTotalPages(result.totalPages);
+    setSelectedIds(new Set());
+  }, []);
+
+  const loadedKey = useRef<string>(serverKey);
   const loadData = useCallback(async () => {
+    loadedKey.current = queryKey(page, activeFilters);
     setIsLoading(true);
     try {
-      const txnData = await getTransactions({ page, ...activeFilters });
-      setTransactions(txnData.transactions);
-      setTotal(txnData.total);
-      setTotalPages(txnData.totalPages);
-      setSelectedIds(new Set());
+      applyResult(await getTransactions({ page, ...activeFilters }));
     } catch {
       toast.error("Failed to load data");
     } finally {
       setIsLoading(false);
     }
-  }, [page, activeFilters]);
+  }, [page, activeFilters, applyResult]);
 
-  const didMount = useRef(false);
+  // The server already rendered page 1 for the URL filters: the state starts
+  // from that payload, a re-rendered payload replaces it, and a fetch only
+  // happens once the query differs from what was last loaded
+  const seededFrom = useRef<TransactionsResult>(initialTxns);
   useEffect(() => {
-    if (!didMount.current) {
-      didMount.current = true;
+    const key = queryKey(page, activeFilters);
+    if (key === serverKey && seededFrom.current !== initialTxns) {
+      seededFrom.current = initialTxns;
+      loadedKey.current = key;
+      applyResult(initialTxns);
       return;
     }
+    if (key === loadedKey.current) return;
     loadData();
-  }, [loadData]);
+  }, [page, activeFilters, serverKey, initialTxns, applyResult, loadData]);
+
+  const toggleTagFilter = (tag: string) => {
+    setTagFilter((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+    setPage(1);
+  };
 
   const handleDelete = async (id: string) => {
     try {
@@ -378,12 +461,65 @@ export function TransactionsClient({
     txn.tags && txn.tags.length > 0 ? (
       <div className="flex flex-wrap gap-1 mt-0.5">
         {txn.tags.map((tag: string) => (
-          <Badge key={tag} variant="outline" className="text-[10px] px-1 py-0">
+          <Badge
+            key={tag}
+            variant={tagFilter.includes(tag) ? "secondary" : "outline"}
+            className="cursor-pointer text-[10px] px-1 py-0"
+            render={<button type="button" onClick={() => toggleTagFilter(tag)} />}
+            aria-label={`Filter by tag ${tag}`}
+          >
             {tag}
           </Badge>
         ))}
       </div>
     ) : null;
+
+  const renderSplitLines = (txn: TransactionRow) => {
+    const currency = txn.currency ?? txn.accountCurrency;
+    return txn.splits.map((split) => (
+      <div key={split.id} className="flex justify-between gap-3">
+        <span>
+          {split.category.icon} {split.category.name}
+          {split.note ? ` · ${split.note}` : ""}
+        </span>
+        <span>{formatCurrency(Number(split.amount), false, currency)}</span>
+      </div>
+    ));
+  };
+
+  const renderMarkers = (txn: TransactionRow) => (
+    <>
+      {txn.splits.length > 0 && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0" />
+            }
+          >
+            <Split className="h-3 w-3" /> Split
+          </TooltipTrigger>
+          <TooltipContent className="flex flex-col gap-0.5 text-left">
+            {renderSplitLines(txn)}
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {receiptsEnabled && txn.receiptKey && (
+        <a
+          href={`/api/receipts/${txn.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-muted-foreground hover:text-foreground"
+          aria-label={`Open receipt ${txn.receiptName ?? ""}`.trim()}
+          title={txn.receiptName ?? "Receipt"}
+        >
+          <Paperclip className="h-3.5 w-3.5" />
+        </a>
+      )}
+    </>
+  );
+
+  const tagFilterLabel =
+    tagFilter.length === 0 ? "Tags" : tagFilter.length === 1 ? tagFilter[0] : `${tagFilter.length} tags`;
 
   const emptyMessage = isLoading ? "Loading..." : "No transactions found";
 
@@ -397,6 +533,13 @@ export function TransactionsClient({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <DateRangePicker />
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={() => setImportOpen(true)}
+            >
+              <Upload className="mr-1 h-4 w-4" /> Import CSV
+            </Button>
             <Button variant="outline" className="flex-1 sm:flex-none" onClick={handleExport}>
               <Download className="mr-1 h-4 w-4" /> Export
             </Button>
@@ -475,6 +618,50 @@ export function TransactionsClient({
             ))}
           </SelectContent>
         </Select>
+        {(initialUserTags.length > 0 || tagFilter.length > 0) && (
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="outline"
+                  className={tagFilter.length > 0 ? "border-primary" : undefined}
+                />
+              }
+            >
+              <Tag className="mr-1 h-4 w-4" /> {tagFilterLabel}
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-56 p-2">
+              <div className="max-h-64 space-y-1 overflow-y-auto">
+                {[...new Set([...initialUserTags, ...tagFilter])].sort().map((tag) => (
+                  <label
+                    key={tag}
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                  >
+                    <Checkbox
+                      checked={tagFilter.includes(tag)}
+                      onCheckedChange={() => toggleTagFilter(tag)}
+                      aria-label={`Filter by tag ${tag}`}
+                    />
+                    <span className="truncate">{tag}</span>
+                  </label>
+                ))}
+              </div>
+              {tagFilter.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1 w-full"
+                  onClick={() => {
+                    setTagFilter([]);
+                    setPage(1);
+                  }}
+                >
+                  Clear tags
+                </Button>
+              )}
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
 
       {/* Bulk actions */}
@@ -591,9 +778,12 @@ export function TransactionsClient({
                     <div className="flex items-center gap-2">
                       <span>{txn.categoryIcon}</span>
                       <div>
-                        <span className="font-medium">
-                          {txn.description || txn.categoryName}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium">
+                            {txn.description || txn.categoryName}
+                          </span>
+                          {renderMarkers(txn)}
+                        </div>
                         {renderTags(txn)}
                       </div>
                     </div>
@@ -646,13 +836,21 @@ export function TransactionsClient({
               />
               <span className="text-lg leading-none">{txn.categoryIcon}</span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
-                  {txn.description || txn.categoryName}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="truncate text-sm font-medium">
+                    {txn.description || txn.categoryName}
+                  </p>
+                  {renderMarkers(txn)}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {txn.accountName} &middot; {format(parseISO(txn.date), "MMM d, yyyy")}
                 </p>
                 {renderTags(txn)}
+                {txn.splits.length > 0 && (
+                  <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                    {renderSplitLines(txn)}
+                  </div>
+                )}
               </div>
               <div className="flex items-start gap-1">
                 <div className="flex flex-col items-end text-sm">
@@ -703,6 +901,14 @@ export function TransactionsClient({
         accounts={accounts}
         categories={categories}
         transaction={editingTransaction}
+        receiptsEnabled={receiptsEnabled}
+      />
+
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        accounts={accounts}
+        onImported={loadData}
       />
     </div>
   );

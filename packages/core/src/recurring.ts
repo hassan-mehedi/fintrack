@@ -6,6 +6,7 @@ import {
 } from "@fintrack/db/schema";
 import { recurringTransactionSchema } from "@fintrack/shared/validators";
 import { and, desc, eq } from "drizzle-orm";
+import { getNextDueDate } from "./recurring-processor";
 
 export async function getRecurringTransactions(userId: string) {
     const data = await db
@@ -23,6 +24,8 @@ export async function getRecurringTransactions(userId: string) {
             endDate: recurringTransactions.endDate,
             isActive: recurringTransactions.isActive,
             lastProcessed: recurringTransactions.lastProcessed,
+            tags: recurringTransactions.tags,
+            reminderDays: recurringTransactions.reminderDays,
             createdAt: recurringTransactions.createdAt,
             categoryName: categories.name,
             categoryIcon: categories.icon,
@@ -37,10 +40,12 @@ export async function getRecurringTransactions(userId: string) {
         .where(eq(recurringTransactions.userId, userId))
         .orderBy(desc(recurringTransactions.createdAt));
 
+    const today = new Date();
     return data.map((r) => ({
         ...r,
         amount: Number(r.amount),
         fee: Number(r.fee),
+        nextDueDate: getNextDueDate(r, today),
     }));
 }
 
@@ -60,6 +65,8 @@ export async function createRecurringTransaction(userId: string, data: unknown) 
             frequency: parsed.frequency,
             startDate: parsed.startDate,
             endDate: parsed.endDate || null,
+            tags: parsed.tags,
+            reminderDays: parsed.reminderDays ?? null,
         })
         .returning();
 
@@ -85,6 +92,8 @@ export async function updateRecurringTransaction(
             frequency: parsed.frequency,
             startDate: parsed.startDate,
             endDate: parsed.endDate || null,
+            tags: parsed.tags,
+            reminderDays: parsed.reminderDays ?? null,
         })
         .where(
             and(

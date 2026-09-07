@@ -6,10 +6,14 @@ import * as budgets from "@fintrack/core/budgets";
 import * as categories from "@fintrack/core/categories";
 import * as dashboard from "@fintrack/core/dashboard";
 import * as exporter from "@fintrack/core/export";
+import { importTransactions } from "@fintrack/core/import";
 import { getNetWorthHistory } from "@fintrack/core/net-worth";
+import * as receipts from "@fintrack/core/receipts";
 import * as recurring from "@fintrack/core/recurring";
 import { processRecurringForUser } from "@fintrack/core/recurring-processor";
 import * as settings from "@fintrack/core/settings";
+import * as splits from "@fintrack/core/splits";
+import { isStorageConfigured } from "@fintrack/core/storage";
 import * as subscription from "@fintrack/core/subscription";
 import * as transactions from "@fintrack/core/transactions";
 
@@ -22,6 +26,17 @@ const transactionFilters = z.object({
     startDate: z.string().optional(),
     endDate: z.string().optional(),
     search: z.string().optional(),
+    // comma-separated list, e.g. ?tags=work,travel
+    tags: z
+        .string()
+        .optional()
+        .transform((value) => {
+            const list = value
+                ?.split(",")
+                .map((tag) => tag.trim())
+                .filter(Boolean);
+            return list?.length ? list : undefined;
+        }),
     page: z.coerce.number().int().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
 });
@@ -144,6 +159,48 @@ export async function resourceRoutes(app: FastifyInstance) {
             .header("content-type", "text/csv; charset=utf-8")
             .header("content-disposition", "attachment; filename=transactions.csv")
             .send(csv);
+    });
+    app.get("/transactions/tags", async (req) => transactions.getUserTags(userId(req)));
+    app.post("/transactions/import", async (req, reply) => {
+        const result = await importTransactions(userId(req), req.body);
+        return reply.code(201).send(result);
+    });
+    app.get("/transactions/:id/splits", async (req) => {
+        const { id } = idParams.parse(req.params);
+        return splits.getSplits(userId(req), id);
+    });
+    app.put("/transactions/:id/splits", async (req) => {
+        const { id } = idParams.parse(req.params);
+        return splits.replaceSplits(userId(req), id, req.body);
+    });
+    app.post("/transactions/:id/receipt", async (req, reply) => {
+        if (!isStorageConfigured()) {
+            return reply.code(503).send({ error: "Receipt storage is not configured" });
+        }
+        const { id } = idParams.parse(req.params);
+        const upload = await req.file({ limits: { fileSize: receipts.RECEIPT_MAX_BYTES } });
+        if (!upload) return reply.code(400).send({ error: "Missing receipt file" });
+        const buffer = await upload.toBuffer();
+        return receipts.attachReceipt(userId(req), id, {
+            name: upload.filename,
+            mime: upload.mimetype,
+            bytes: new Uint8Array(buffer),
+        });
+    });
+    app.get("/transactions/:id/receipt", async (req, reply) => {
+        if (!isStorageConfigured()) {
+            return reply.code(503).send({ error: "Receipt storage is not configured" });
+        }
+        const { id } = idParams.parse(req.params);
+        return receipts.getReceiptUrl(userId(req), id);
+    });
+    app.delete("/transactions/:id/receipt", async (req, reply) => {
+        if (!isStorageConfigured()) {
+            return reply.code(503).send({ error: "Receipt storage is not configured" });
+        }
+        const { id } = idParams.parse(req.params);
+        await receipts.removeReceipt(userId(req), id);
+        return { success: true };
     });
 
     app.get("/budgets", async (req) => {

@@ -71,6 +71,13 @@
       "when": 1788797957871,
       "tag": "0009_amazing_ezekiel_stane",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788802040326,
+      "tag": "0010_lowly_tomas",
+      "breakpoints": true
     }
   ]
 }

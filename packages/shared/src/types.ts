@@ -5,6 +5,8 @@ import type {
   transactions,
   budgets,
   recurringTransactions,
+  transactionSplits,
+  savingsGoals,
 } from "@fintrack/db/schema";
 
 // Infer types from Drizzle schema
@@ -26,11 +28,30 @@ export type NewBudget = typeof budgets.$inferInsert;
 export type RecurringTransaction = typeof recurringTransactions.$inferSelect;
 export type NewRecurringTransaction = typeof recurringTransactions.$inferInsert;
 
+export type TransactionSplit = typeof transactionSplits.$inferSelect;
+export type NewTransactionSplit = typeof transactionSplits.$inferInsert;
+
+export type SavingsGoal = typeof savingsGoals.$inferSelect;
+export type NewSavingsGoal = typeof savingsGoals.$inferInsert;
+
+export type TransactionSplitWithCategory = TransactionSplit & {
+  category: Pick<Category, "id" | "name" | "icon" | "color">;
+};
+
+export type SavingsGoalWithProgress = SavingsGoal & {
+  // current progress in the user's base currency
+  current: number;
+  percent: number;
+  remaining: number;
+  accountName: string | null;
+};
+
 // Extended types with relations
 export type TransactionWithCategory = Transaction & {
   category: Category;
   account: FinancialAccount;
   toAccount?: FinancialAccount | null;
+  splits?: TransactionSplitWithCategory[];
 };
 
 export type BudgetWithCategory = Budget & {

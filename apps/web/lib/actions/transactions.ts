@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import * as splits from "@fintrack/core/splits";
 import * as transactions from "@fintrack/core/transactions";
 import type { TransactionFilters } from "@fintrack/core/transactions";
 import { requireUserId } from "@/lib/action-session";
@@ -51,4 +52,17 @@ export async function updateTransactionsCategory(ids: string[], categoryId: stri
     await transactions.updateTransactionsCategory(userId, ids, categoryId);
 
     revalidateTransactionPages();
+}
+
+export async function getUserTags() {
+    const userId = await requireUserId();
+    return transactions.getUserTags(userId);
+}
+
+export async function replaceSplits(transactionId: string, data: unknown) {
+    const userId = await requireUserId();
+    const saved = await splits.replaceSplits(userId, transactionId, data);
+
+    revalidateTransactionPages();
+    return saved;
 }

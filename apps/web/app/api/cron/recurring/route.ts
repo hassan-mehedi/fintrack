@@ -1,8 +1,4 @@
-import {
-  processRecurringForUser,
-  getUserIdsWithActiveRecurring,
-} from "@fintrack/core/recurring-processor";
-import { checkBudgetAlerts } from "@/lib/budget-alerts";
+import { runScheduledJobs } from "@fintrack/core/jobs";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -16,46 +12,15 @@ function isAuthorized(req: Request): boolean {
 }
 
 export async function GET(req: Request) {
-  const start = Date.now();
-
   if (!isAuthorized(req)) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const userIds = await getUserIdsWithActiveRecurring();
-  let created = 0;
-  let failures = 0;
+  const report = await runScheduledJobs();
 
-  for (const userId of userIds) {
-    try {
-      const result = await processRecurringForUser(userId);
-      created += result.created;
-    } catch (error) {
-      failures++;
-      logger.error({ userId, error }, "recurring cron: failed for user");
-    }
-  }
+  logger.info({ path: "/api/cron/recurring", ...report }, "scheduled jobs completed");
 
-  let alertsSent = 0;
-  try {
-    alertsSent = await checkBudgetAlerts();
-  } catch (error) {
-    logger.error({ error }, "recurring cron: budget alerts failed");
-  }
-
-  logger.info(
-    {
-      path: "/api/cron/recurring",
-      users: userIds.length,
-      created,
-      failures,
-      alertsSent,
-      duration: Date.now() - start,
-    },
-    "recurring cron completed"
-  );
-
-  return Response.json({ users: userIds.length, created, failures, alertsSent });
+  return Response.json(report);
 }
 
 export const POST = GET;
