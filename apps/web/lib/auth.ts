@@ -1,7 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
-import { randomUUID } from "crypto";
 import { cache } from "react";
 import { db } from "@fintrack/db";
 import { users } from "@fintrack/db/schema";
@@ -104,7 +103,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           sessionVersion?: number;
         };
         token.id = u.id;
-        token.jti = randomUUID();
+        token.jti = crypto.randomUUID();
         token.sessionVersion = u.sessionVersion ?? 0;
         token.plan = u.plan ?? "free";
         token.currency = u.currency ?? "BDT";
