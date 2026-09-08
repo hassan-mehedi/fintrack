@@ -88,8 +88,8 @@ CRON_SECRET=
 # Install dependencies
 npm install
 
-# Push schema to database
-npm run db:push
+# Apply migrations to database
+npm run db:migrate
 
 # Run development server
 npm run dev
@@ -100,8 +100,8 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 ### Database Commands
 
 ```bash
-npm run db:push       # Push schema changes to database
-npm run db:migrate    # Run migrations
+npm run db:migrate    # Apply pending migrations (use this everywhere)
+npm run db:push       # Push schema straight to a throwaway local database
 npm run db:studio     # Open Drizzle Studio (database GUI)
 npm run db:generate   # Generate migration files
 ```
@@ -171,7 +171,9 @@ This repo now includes a multi-stage `Dockerfile` for Dokploy or any other conta
 - Set your runtime environment variables in Dokploy:
   `DATABASE_URL`, `AUTH_SECRET`, `OPENAI_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, and optionally `NEXT_PUBLIC_SITE_URL`.
 - The Docker build caps the Node.js heap to `1024 MB` during `next build`, which is often more stable on smaller hosts.
-- The API container runs `drizzle-kit migrate` on start, so pending migrations in `packages/db/migrations` are applied before the server listens. The web container does not migrate; deploy the API first when a release adds a migration.
+- The API container runs `npm run db:migrate` on start, so pending migrations in `packages/db/migrations` are applied before the server listens. The web container does not migrate; deploy the API first when a release adds a migration.
+- That script logs the target database, how many migrations are recorded, and which ones are pending. It stops the container when a recorded migration's hash does not match its file, because Drizzle would otherwise skip that migration and leave the schema behind the code.
+- Never run `db:push` against production. It changes the schema without recording anything in `drizzle.__drizzle_migrations`, so later migrations get skipped and the app fails on missing columns.
 - The API container also runs the scheduled jobs (see `JOBS_*` above). Run one API replica, or set `JOBS_ENABLED=false` on all but one, so the jobs do not run twice per interval.
 
 If your Dokploy server still runs out of memory during image build, lower parallel load on the host or add temporary swap. The biggest memory consumer is still `next build`, but Dockerfile builds are usually easier to control than Nixpacks on a 2 GB machine.
@@ -182,7 +184,7 @@ The app is also designed for Vercel + Neon + Upstash:
 
 1. Push the repo to GitHub
 2. Connect to Vercel and set environment variables
-3. Run `npm run db:push` against your production database once
+3. Run `npm run db:migrate` against your production database
 
 ## License
 
